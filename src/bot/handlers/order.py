@@ -1,4 +1,6 @@
 """Обработчики заказа и фотографий."""
+import asyncio
+from typing import Dict
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
@@ -17,6 +19,9 @@ from src.services.pricing import PricingService
 from src.models.photo import PhotoFormat
 
 router = Router()
+
+# Словарь для отслеживания пачек фото: {user_id: {"task": Task, "count": int, "last_total": int}}
+_photo_batch_tasks: Dict[int, dict] = {}
 
 UPLOAD_MESSAGE = """📸 Пожалуйста, ознакомьтесь с тем, как будут кадрироваться фото:
 https://dariakis28.ru/kadrirovanie-fotografiy
@@ -58,21 +63,63 @@ async def select_format(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(OrderStates.uploading_photos, F.photo)
-async def handle_photo(message: Message, state: FSMContext):
-    """Обработка загруженного фото (сжатого)."""
+async def _send_batch_confirmation(
+    bot: Bot,
+    user_id: int,
+    order_id: int,
+    batch_count: int,
+):
+    """Отправляет сообщение о добавленных фото после задержки."""
+    await asyncio.sleep(1.5)  # Ждём 1.5 секунды после последнего фото
+    
+    # Проверяем, что задача ещё актуальна
+    if user_id not in _photo_batch_tasks:
+        return
+    
+    # Получаем актуальное количество фото
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        if not order:
+            return
+        photos_count = order.photos_count
+    
+    batch_info = _photo_batch_tasks.pop(user_id, None)
+    if not batch_info:
+        return
+    
+    added_count = batch_info.get("count", 1)
+    
+    if added_count > 1:
+        text = f"✅ Добавлено {added_count} фото! Всего загружено: {photos_count} шт."
+    else:
+        text = f"✅ Фото добавлено! Всего загружено: {photos_count} шт."
+    
+    await bot.send_message(
+        chat_id=user_id,
+        text=f"{text}\n\nПродолжайте отправлять фото или выберите действие:",
+        reply_markup=get_photo_actions_keyboard(has_photos=True),
+    )
+
+
+async def _add_photo_to_batch(
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    file_id: str,
+    is_document: bool = False,
+):
+    """Добавляет фото в заказ и планирует отправку подтверждения."""
     data = await state.get_data()
     order_id = data.get("order_id")
     current_format = data.get("current_format")
+    user_id = message.from_user.id
     
     if not order_id or not current_format:
         await message.answer("Ошибка. Пожалуйста, начните заново: /start")
         return
     
     photo_format = PhotoFormat(current_format)
-    
-    # Берём фото максимального размера
-    file_id = message.photo[-1].file_id
     
     async with async_session() as session:
         service = OrderService(session)
@@ -84,29 +131,33 @@ async def handle_photo(message: Message, state: FSMContext):
         
         # Добавляем фото
         await service.add_photo(order, photo_format, file_id)
-        
-        # Обновляем данные заказа
-        order = await service.get_order_by_id(order_id)
-        photos_count = order.photos_count
     
-    await message.answer(
-        f"✅ Фото добавлено! Всего загружено: {photos_count} шт.\n\n"
-        "Продолжайте отправлять фото или выберите действие:",
-        reply_markup=get_photo_actions_keyboard(has_photos=True),
+    # Отменяем предыдущую задачу отправки сообщения, если есть
+    if user_id in _photo_batch_tasks:
+        old_task = _photo_batch_tasks[user_id].get("task")
+        if old_task and not old_task.done():
+            old_task.cancel()
+        _photo_batch_tasks[user_id]["count"] += 1
+    else:
+        _photo_batch_tasks[user_id] = {"count": 1}
+    
+    # Создаём новую задачу с задержкой
+    task = asyncio.create_task(
+        _send_batch_confirmation(bot, user_id, order_id, _photo_batch_tasks[user_id]["count"])
     )
+    _photo_batch_tasks[user_id]["task"] = task
+
+
+@router.message(OrderStates.uploading_photos, F.photo)
+async def handle_photo(message: Message, state: FSMContext, bot: Bot):
+    """Обработка загруженного фото (сжатого)."""
+    file_id = message.photo[-1].file_id
+    await _add_photo_to_batch(message, state, bot, file_id, is_document=False)
 
 
 @router.message(OrderStates.uploading_photos, F.document)
-async def handle_document(message: Message, state: FSMContext):
+async def handle_document(message: Message, state: FSMContext, bot: Bot):
     """Обработка загруженного документа (без сжатия)."""
-    data = await state.get_data()
-    order_id = data.get("order_id")
-    current_format = data.get("current_format")
-    
-    if not order_id or not current_format:
-        await message.answer("Ошибка. Пожалуйста, начните заново: /start")
-        return
-    
     # Проверяем, что это изображение
     mime_type = message.document.mime_type or ""
     if not mime_type.startswith("image/"):
@@ -116,27 +167,8 @@ async def handle_document(message: Message, state: FSMContext):
         )
         return
     
-    photo_format = PhotoFormat(current_format)
     file_id = message.document.file_id
-    
-    async with async_session() as session:
-        service = OrderService(session)
-        order = await service.get_order_by_id(order_id)
-        
-        if not order:
-            await message.answer("Заказ не найден. Начните заново: /start")
-            return
-        
-        await service.add_photo(order, photo_format, file_id)
-        
-        order = await service.get_order_by_id(order_id)
-        photos_count = order.photos_count
-    
-    await message.answer(
-        f"✅ Фото добавлено (оригинал)! Всего загружено: {photos_count} шт.\n\n"
-        "Продолжайте отправлять фото или выберите действие:",
-        reply_markup=get_photo_actions_keyboard(has_photos=True),
-    )
+    await _add_photo_to_batch(message, state, bot, file_id, is_document=True)
 
 
 @router.callback_query(F.data == "add_another_format")
