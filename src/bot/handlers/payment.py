@@ -20,7 +20,7 @@ router = Router()
 def format_payment_summary(order, show_promocode_info: bool = True) -> str:
     """Форматирует сводку для оплаты."""
     lines = [
-        "💰 **Стоимость заказа:**\n",
+        "💰 <b>Стоимость заказа:</b>\n",
         f"📷 Фотографии: {order.photos_cost}₽",
         f"🚚 Доставка: {order.delivery_cost}₽",
     ]
@@ -28,7 +28,7 @@ def format_payment_summary(order, show_promocode_info: bool = True) -> str:
     if order.discount > 0:
         lines.append(f"🎟 Скидка: -{order.discount}₽")
     
-    lines.append(f"\n**Итого к оплате: {order.total_cost}₽**")
+    lines.append(f"\n<b>Итого к оплате: {order.total_cost}₽</b>")
     
     if show_promocode_info and order.discount == 0:
         lines.append("\n💡 У вас есть промокод?")
@@ -58,7 +58,7 @@ async def go_to_payment(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         format_payment_summary(order),
         reply_markup=get_promocode_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await callback.answer()
@@ -68,9 +68,9 @@ async def go_to_payment(callback: CallbackQuery, state: FSMContext):
 async def enter_promocode(callback: CallbackQuery, state: FSMContext):
     """Ввод промокода."""
     await callback.message.edit_text(
-        "🎟 **Введите промокод:**\n\n"
+        "🎟 <b>Введите промокод:</b>\n\n"
         "Отправьте промокод в сообщении.",
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.entering_promocode)
@@ -119,11 +119,11 @@ async def process_promocode(message: Message, state: FSMContext):
         order = await service.apply_promocode(order, promocode)
     
     await message.answer(
-        f"✅ Промокод **{code}** применён!\n"
+        f"✅ Промокод <b>{code}</b> применён!\n"
         f"Скидка: {order.discount}₽\n\n"
         + format_payment_summary(order, show_promocode_info=False),
         reply_markup=get_promocode_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_delivery)
@@ -146,8 +146,7 @@ async def skip_promocode(callback: CallbackQuery, state: FSMContext):
         # Обновляем статус на "Ожидает оплаты"
         await service.update_order_status(order, OrderStatus.PENDING_PAYMENT)
     
-    payment_text = f"""
-💳 **Оплата заказа #{order.order_number}**
+    payment_text = f"""💳 <b>Оплата заказа #{order.order_number}</b>
 
 📷 Стоимость фотографий: {order.photos_cost}₽
 🚚 Стоимость доставки: {order.delivery_cost}₽
@@ -157,25 +156,24 @@ async def skip_promocode(callback: CallbackQuery, state: FSMContext):
         payment_text += f"🎟 Скидка: -{order.discount}₽\n"
     
     payment_text += f"""
-**💰 Итого: {order.total_cost}₽**
+<b>💰 Итого: {order.total_cost}₽</b>
 
 ━━━━━━━━━━━━━━━
 
-**Оплата переводом на Т-банк:**
+<b>Оплата переводом на Т-банк:</b>
 
-📱 По номеру телефона: `{settings.payment_phone}`
-💳 На карту: `{settings.payment_card}`
+📱 По номеру телефона: <code>{settings.payment_phone}</code>
+💳 На карту: <code>{settings.payment_card}</code>
 👤 Получатель: {settings.payment_receiver}
 
 ━━━━━━━━━━━━━━━
 
-**Пришлите, пожалуйста, скриншот квитанции об оплате** 📎
-"""
+<b>Пришлите, пожалуйста, скриншот квитанции об оплате</b> 📎"""
     
     await callback.message.edit_text(
         payment_text,
         reply_markup=get_payment_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.waiting_payment_receipt)
@@ -196,7 +194,7 @@ async def back_to_promocode(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 format_payment_summary(order),
                 reply_markup=get_promocode_keyboard(),
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
     
     await state.set_state(OrderStates.selecting_delivery)
@@ -224,11 +222,11 @@ async def process_payment_receipt_photo(message: Message, state: FSMContext):
         await service.update_order_status(order, OrderStatus.PAID)
     
     await message.answer(
-        f"✅ **Спасибо! Ваш заказ #{order.order_number} принят в работу!**\n\n"
+        f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
         "Мы сообщим вам, когда фотографии будут распечатаны и готовы к отправке.\n\n"
         f"Для связи с менеджером: @{settings.manager_username}",
         reply_markup=get_final_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.clear()
@@ -254,11 +252,11 @@ async def process_payment_receipt_document(message: Message, state: FSMContext):
         await service.update_order_status(order, OrderStatus.PAID)
     
     await message.answer(
-        f"✅ **Спасибо! Ваш заказ #{order.order_number} принят в работу!**\n\n"
+        f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
         "Мы сообщим вам, когда фотографии будут распечатаны и готовы к отправке.\n\n"
         f"Для связи с менеджером: @{settings.manager_username}",
         reply_markup=get_final_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.clear()

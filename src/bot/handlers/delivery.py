@@ -15,52 +15,44 @@ from src.config import settings
 
 router = Router()
 
-DELIVERY_MESSAGE = """
-🚚 **Выберите способ доставки:**
+DELIVERY_MESSAGE = """🚚 <b>Выберите способ доставки:</b>
 
-**📦 ОЗОН доставка в пункт выдачи**
+<b>📦 ОЗОН доставка в пункт выдачи</b>
 • Стоимость: 100₽
 • Срок доставки: от 4 дней
 • Необходимо наличие приложения ОЗОН
 
-**🚗 Курьером по Москве**
+<b>🚗 Курьером по Москве</b>
 • Служба Достависта
 • Время и стоимость по согласованию
 
-**🏠 Самовывоз**
+<b>🏠 Самовывоз</b>
 • г. Москва, м. Чертановская
 • Балаклавский пр-т 12к3, подъезд 1
-• Время по согласованию
-"""
+• Время по согласованию"""
 
-OZON_DELIVERY_MESSAGE = """
-📦 **Доставка ОЗОН**
+OZON_DELIVERY_MESSAGE = """📦 <b>Доставка ОЗОН</b>
 
 Напишите в одном сообщении:
 • Город доставки
 • Ваш номер телефона
 
-После оформления доставки мы попросим вас выбрать пункт выдачи в приложении.
-"""
+После оформления доставки мы попросим вас выбрать пункт выдачи в приложении."""
 
-COURIER_DELIVERY_MESSAGE = """
-🚗 **Доставка курьером**
+COURIER_DELIVERY_MESSAGE = """🚗 <b>Доставка курьером</b>
 
 Напишите в одном сообщении:
 • Адрес доставки
 • Ваш номер телефона
 • Дата и время (не ранее чем через 2 дня)
 
-После оформления заказа с вами свяжется менеджер.
-"""
+После оформления заказа с вами свяжется менеджер."""
 
-PICKUP_MESSAGE = """
-🏠 **Самовывоз**
+PICKUP_MESSAGE = """🏠 <b>Самовывоз</b>
 
 Адрес: г. Москва, м. Чертановская, Балаклавский пр-т 12к3, подъезд 1
 
-После оформления заказа с вами свяжется менеджер для согласования времени.
-"""
+После оформления заказа с вами свяжется менеджер для согласования времени."""
 
 
 @router.callback_query(F.data == "select_delivery")
@@ -69,7 +61,7 @@ async def select_delivery(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         DELIVERY_MESSAGE,
         reply_markup=get_delivery_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_delivery)
@@ -83,7 +75,7 @@ async def delivery_ozon(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         OZON_DELIVERY_MESSAGE,
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.entering_ozon_delivery)
@@ -119,12 +111,12 @@ async def process_ozon_delivery(message: Message, state: FSMContext):
         order = await service.get_order_by_id(order_id)
     
     await message.answer(
-        f"✅ **Данные доставки сохранены**\n\n"
+        f"✅ <b>Данные доставки сохранены</b>\n\n"
         f"📦 Способ: ОЗОН доставка\n"
         f"📍 Данные: {text}\n"
         f"💰 Стоимость доставки: {order.delivery_cost}₽",
         reply_markup=get_delivery_confirm_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_delivery)
@@ -137,7 +129,7 @@ async def delivery_courier(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         COURIER_DELIVERY_MESSAGE,
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.entering_courier_delivery)
@@ -170,12 +162,12 @@ async def process_courier_delivery(message: Message, state: FSMContext):
         order = await service.get_order_by_id(order_id)
     
     await message.answer(
-        f"✅ **Данные доставки сохранены**\n\n"
+        f"✅ <b>Данные доставки сохранены</b>\n\n"
         f"🚗 Способ: Курьер по Москве\n"
         f"📍 Данные: {text}\n\n"
         f"После оформления заказа с вами свяжется менеджер.",
         reply_markup=get_delivery_confirm_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_delivery)
@@ -203,7 +195,7 @@ async def delivery_pickup(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         PICKUP_MESSAGE,
         reply_markup=get_delivery_confirm_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await callback.answer()
@@ -216,8 +208,7 @@ async def delivery_manager(callback: CallbackQuery, state: FSMContext):
         f"💬 Пожалуйста, напишите менеджеру: @{settings.manager_username}\n\n"
         "Он поможет подобрать удобный способ доставки.",
         reply_markup=get_delivery_confirm_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await callback.answer()
-

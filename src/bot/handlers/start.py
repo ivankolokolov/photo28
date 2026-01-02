@@ -13,21 +13,19 @@ from src.services.order_service import OrderService
 
 router = Router()
 
-WELCOME_MESSAGE = """
-Здравствуйте! 👋
+WELCOME_MESSAGE = """Здравствуйте! 👋
 
-Я бот приёма заказов **Photo28**!
+Я бот приёма заказов <b>Photo28</b>!
 
 Какой формат фотографий вы хотите напечатать?
 
-📷 **Форматы:**
+📷 <b>Форматы:</b>
 • Полароид 7.6х10 стандарт
-• Полароид 7.6х10 широкий  
+• Полароид 7.6х10 широкий
 • Инстакс 5.4х8.6
 • Классика 10х15 без рамки
 
-Для связи с менеджером: @{manager}
-"""
+Для связи с менеджером: @{manager}"""
 
 
 @router.message(CommandStart())
@@ -53,7 +51,7 @@ async def cmd_start(message: Message, state: FSMContext):
     await message.answer(
         WELCOME_MESSAGE.format(manager=settings.manager_username),
         reply_markup=get_format_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_format)
@@ -79,7 +77,7 @@ async def new_order(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         WELCOME_MESSAGE.format(manager=settings.manager_username),
         reply_markup=get_format_keyboard(),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(OrderStates.selecting_format)

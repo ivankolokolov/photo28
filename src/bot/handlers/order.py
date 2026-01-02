@@ -17,14 +17,12 @@ from src.models.photo import PhotoFormat
 
 router = Router()
 
-UPLOAD_MESSAGE = """
-📸 Пожалуйста, ознакомьтесь с тем, как будут кадрироваться фото:
+UPLOAD_MESSAGE = """📸 Пожалуйста, ознакомьтесь с тем, как будут кадрироваться фото:
 https://dariakis28.ru/kadrirovanie-fotografiy
 
-Вы выбрали формат: **{format_name}**
+Вы выбрали формат: <b>{format_name}</b>
 
-Пришлите мне фото. Чтобы сохранить качество — присылайте файлами "без сжатия" 📎
-"""
+Пришлите мне фото. Чтобы сохранить качество — присылайте файлами "без сжатия" 📎"""
 
 MIN_PHOTOS = 10
 
@@ -51,7 +49,7 @@ async def select_format(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         UPLOAD_MESSAGE.format(format_name=photo_format.display_name),
         reply_markup=get_photo_actions_keyboard(has_photos),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         disable_web_page_preview=True,
     )
     
@@ -186,16 +184,16 @@ async def show_order_summary(message, order, edit: bool = False):
     photos_by_format = order.photos_by_format()
     
     # Формируем текст сводки
-    lines = ["**📋 Ваш заказ:**\n"]
+    lines = ["<b>📋 Ваш заказ:</b>\n"]
     
     for fmt, count in photos_by_format.items():
         lines.append(f"• {fmt.short_name}: {count} шт.")
     
-    lines.append(f"\nВсего фото: **{order.photos_count}** шт.")
+    lines.append(f"\nВсего фото: <b>{order.photos_count}</b> шт.")
     
     # Расчёт стоимости
     cost = PricingService.calculate_total_cost(photos_by_format)
-    lines.append(f"\n💰 Предварительная стоимость (без доставки): **{cost}₽**")
+    lines.append(f"\n💰 Предварительная стоимость (без доставки): <b>{cost}₽</b>")
     
     # Проверяем оптимизацию
     hint = PricingService.get_price_optimization_hint(photos_by_format)
@@ -208,13 +206,13 @@ async def show_order_summary(message, order, edit: bool = False):
         await message.edit_text(
             text,
             reply_markup=get_order_summary_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     else:
         await message.answer(
             text,
             reply_markup=get_order_summary_keyboard(),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
 
 
@@ -277,11 +275,11 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext):
         await state.update_data(delete_page=0)
         
         await callback.message.edit_text(
-            "🗑 **Удаление фото**\n\n"
+            "🗑 <b>Удаление фото</b>\n\n"
             "Выберите фото для удаления.\n"
             "После удаления нажмите «Закончить удаление»",
             reply_markup=get_delete_photos_keyboard(order.photos, page=0),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     
     await state.set_state(OrderStates.deleting_photos)
@@ -332,11 +330,11 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext):
                 await state.update_data(delete_page=page)
             
             await callback.message.edit_text(
-                f"🗑 **Удаление фото**\n\n"
+                f"🗑 <b>Удаление фото</b>\n\n"
                 f"Осталось фото: {len(order.photos)}\n"
                 "Выберите фото для удаления или завершите:",
                 reply_markup=get_delete_photos_keyboard(order.photos, page=page),
-                parse_mode="Markdown",
+                parse_mode="HTML",
             )
 
 

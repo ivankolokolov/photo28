@@ -14,7 +14,7 @@ jinja2==3.1.3
 python-multipart==0.0.6
 
 # Yandex Disk integration
-yadisk-async==1.4.6
+yadisk-async==1.4.5
 
 # Utils
 python-dotenv==1.0.0

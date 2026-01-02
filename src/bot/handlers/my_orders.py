@@ -34,10 +34,10 @@ async def show_my_orders(callback: CallbackQuery, state: FSMContext):
         )
     else:
         await callback.message.edit_text(
-            "📋 **Ваши заказы:**\n\n"
+            "📋 <b>Ваши заказы:</b>\n\n"
             "Нажмите на заказ для просмотра деталей.",
             reply_markup=get_my_orders_keyboard(orders),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     
     await state.set_state(MyOrdersStates.viewing_orders)
@@ -66,10 +66,10 @@ async def cmd_orders(message: Message, state: FSMContext):
         )
     else:
         await message.answer(
-            "📋 **Ваши заказы:**\n\n"
+            "📋 <b>Ваши заказы:</b>\n\n"
             "Нажмите на заказ для просмотра деталей.",
             reply_markup=get_my_orders_keyboard(orders),
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     
     await state.set_state(MyOrdersStates.viewing_orders)
@@ -92,11 +92,11 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
         
         # Формируем текст деталей
         lines = [
-            f"📋 **Заказ #{order.order_number}**\n",
-            f"📊 Статус: **{order.status.display_name}**",
+            f"📋 <b>Заказ #{order.order_number}</b>\n",
+            f"📊 Статус: <b>{order.status.display_name}</b>",
             f"📅 Создан: {order.created_at.strftime('%d.%m.%Y %H:%M')}",
             "",
-            "**Фотографии:**",
+            "<b>Фотографии:</b>",
         ]
         
         for fmt, count in photos_by_format.items():
@@ -104,7 +104,7 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
         
         lines.extend([
             "",
-            "**Стоимость:**",
+            "<b>Стоимость:</b>",
             f"• Фотографии: {order.photos_cost}₽",
             f"• Доставка: {order.delivery_cost}₽",
         ])
@@ -112,7 +112,7 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
         if order.discount > 0:
             lines.append(f"• Скидка: -{order.discount}₽")
         
-        lines.append(f"• **Итого: {order.total_cost}₽**")
+        lines.append(f"• <b>Итого: {order.total_cost}₽</b>")
         
         if order.delivery_type:
             lines.extend([
@@ -127,7 +127,7 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text,
         reply_markup=get_order_detail_keyboard(order),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     
     await state.set_state(MyOrdersStates.viewing_order_details)

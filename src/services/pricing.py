@@ -1,5 +1,5 @@
 """Сервис расчёта стоимости."""
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional
 from src.models.photo import PhotoFormat
 
 
@@ -113,7 +113,7 @@ class PricingService:
         return total
     
     @classmethod
-    def get_price_optimization_hint(cls, photos_by_format: Dict[PhotoFormat, int]) -> str | None:
+    def get_price_optimization_hint(cls, photos_by_format: Dict[PhotoFormat, int]) -> Optional[str]:
         """
         Проверяет, есть ли возможность сэкономить заказав больше фото.
         
