@@ -257,8 +257,49 @@ def get_order_detail_keyboard(order: Order) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_photo_preview_keyboard(photo: Photo, current_idx: int, total: int) -> InlineKeyboardMarkup:
+    """Клавиатура для превью фото при удалении."""
+    builder = InlineKeyboardBuilder()
+    
+    # Кнопка удаления
+    builder.row(
+        InlineKeyboardButton(
+            text="🗑 Удалить это фото",
+            callback_data=f"delete_photo:{photo.id}"
+        )
+    )
+    
+    # Навигация
+    nav_buttons = []
+    if current_idx > 0:
+        nav_buttons.append(
+            InlineKeyboardButton(text="◀️ Пред.", callback_data=f"preview_photo:{current_idx - 1}")
+        )
+    
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{current_idx + 1}/{total}", callback_data="noop")
+    )
+    
+    if current_idx < total - 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="След. ▶️", callback_data=f"preview_photo:{current_idx + 1}")
+        )
+    
+    builder.row(*nav_buttons)
+    
+    # Завершение
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Закончить удаление",
+            callback_data="finish_deleting"
+        )
+    )
+    
+    return builder.as_markup()
+
+
 def get_delete_photos_keyboard(photos: List[Photo], page: int = 0, per_page: int = 5) -> InlineKeyboardMarkup:
-    """Клавиатура удаления фото."""
+    """Клавиатура удаления фото (старая, для совместимости)."""
     builder = InlineKeyboardBuilder()
     
     start = page * per_page
@@ -295,4 +336,3 @@ def get_delete_photos_keyboard(photos: List[Photo], page: int = 0, per_page: int
     )
     
     return builder.as_markup()
-

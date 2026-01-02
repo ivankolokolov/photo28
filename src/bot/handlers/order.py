@@ -1,6 +1,6 @@
 """Обработчики заказа и фотографий."""
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
 
 from src.bot.states import OrderStates
@@ -9,6 +9,7 @@ from src.bot.keyboards import (
     get_photo_actions_keyboard,
     get_order_summary_keyboard,
     get_delete_photos_keyboard,
+    get_photo_preview_keyboard,
 )
 from src.database import async_session
 from src.services.order_service import OrderService
@@ -259,8 +260,8 @@ async def back_to_summary(callback: CallbackQuery, state: FSMContext):
 # === Удаление фото ===
 
 @router.callback_query(F.data == "delete_photos")
-async def start_delete_photos(callback: CallbackQuery, state: FSMContext):
-    """Начало удаления фото."""
+async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Начало удаления фото — показываем первое фото с превью."""
     data = await state.get_data()
     order_id = data.get("order_id")
     
@@ -272,13 +273,21 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext):
             await callback.answer("Нет фото для удаления")
             return
         
-        await state.update_data(delete_page=0)
+        # Сохраняем текущий индекс фото
+        await state.update_data(delete_photo_idx=0)
         
-        await callback.message.edit_text(
-            "🗑 <b>Удаление фото</b>\n\n"
-            "Выберите фото для удаления.\n"
-            "После удаления нажмите «Закончить удаление»",
-            reply_markup=get_delete_photos_keyboard(order.photos, page=0),
+        # Удаляем старое сообщение
+        await callback.message.delete()
+        
+        # Отправляем первое фото с превью
+        photo = order.photos[0]
+        await bot.send_photo(
+            chat_id=callback.from_user.id,
+            photo=photo.telegram_file_id,
+            caption=f"🗑 <b>Удаление фото</b>\n\n"
+                    f"Фото {1} из {len(order.photos)}\n"
+                    f"Формат: {photo.format.short_name}",
+            reply_markup=get_photo_preview_keyboard(photo, 0, len(order.photos)),
             parse_mode="HTML",
         )
     
@@ -286,13 +295,57 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(OrderStates.deleting_photos, F.data.startswith("preview_photo:"))
+async def preview_photo(callback: CallbackQuery, state: FSMContext):
+    """Переход к другому фото для превью."""
+    idx = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    order_id = data.get("order_id")
+    
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        
+        if not order or not order.photos:
+            await callback.answer("Фото не найдены")
+            return
+        
+        if idx < 0 or idx >= len(order.photos):
+            await callback.answer("Фото не найдено")
+            return
+        
+        await state.update_data(delete_photo_idx=idx)
+        
+        photo = order.photos[idx]
+        
+        # Редактируем медиа и клавиатуру
+        await callback.message.edit_media(
+            media=InputMediaPhoto(
+                media=photo.telegram_file_id,
+                caption=f"🗑 <b>Удаление фото</b>\n\n"
+                        f"Фото {idx + 1} из {len(order.photos)}\n"
+                        f"Формат: {photo.format.short_name}",
+                parse_mode="HTML",
+            ),
+            reply_markup=get_photo_preview_keyboard(photo, idx, len(order.photos)),
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(OrderStates.deleting_photos, F.data == "noop")
+async def noop_handler(callback: CallbackQuery):
+    """Пустой обработчик для кнопки-счётчика."""
+    await callback.answer()
+
+
 @router.callback_query(OrderStates.deleting_photos, F.data.startswith("delete_photo:"))
-async def delete_photo(callback: CallbackQuery, state: FSMContext):
+async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Удаление конкретного фото."""
     photo_id = int(callback.data.split(":")[1])
     data = await state.get_data()
     order_id = data.get("order_id")
-    page = data.get("delete_page", 0)
+    current_idx = data.get("delete_photo_idx", 0)
     
     async with async_session() as session:
         service = OrderService(session)
@@ -317,50 +370,39 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext):
         order = await service.get_order_by_id(order_id)
         
         if not order.photos:
-            await callback.message.edit_text(
-                "Все фото удалены. Выберите формат для добавления новых:",
+            # Все фото удалены
+            await callback.message.delete()
+            await bot.send_message(
+                chat_id=callback.from_user.id,
+                text="Все фото удалены. Выберите формат для добавления новых:",
                 reply_markup=get_format_keyboard(),
             )
             await state.set_state(OrderStates.selecting_format)
         else:
-            # Корректируем страницу если нужно
-            max_page = (len(order.photos) - 1) // 5
-            if page > max_page:
-                page = max_page
-                await state.update_data(delete_page=page)
+            # Корректируем индекс если нужно
+            if current_idx >= len(order.photos):
+                current_idx = len(order.photos) - 1
             
-            await callback.message.edit_text(
-                f"🗑 <b>Удаление фото</b>\n\n"
-                f"Осталось фото: {len(order.photos)}\n"
-                "Выберите фото для удаления или завершите:",
-                reply_markup=get_delete_photos_keyboard(order.photos, page=page),
-                parse_mode="HTML",
+            await state.update_data(delete_photo_idx=current_idx)
+            
+            photo = order.photos[current_idx]
+            
+            # Обновляем превью
+            await callback.message.edit_media(
+                media=InputMediaPhoto(
+                    media=photo.telegram_file_id,
+                    caption=f"🗑 <b>Удаление фото</b>\n\n"
+                            f"Фото {current_idx + 1} из {len(order.photos)}\n"
+                            f"Формат: {photo.format.short_name}\n\n"
+                            f"✅ Фото удалено! Осталось: {len(order.photos)}",
+                    parse_mode="HTML",
+                ),
+                reply_markup=get_photo_preview_keyboard(photo, current_idx, len(order.photos)),
             )
-
-
-@router.callback_query(OrderStates.deleting_photos, F.data.startswith("photos_page:"))
-async def photos_page(callback: CallbackQuery, state: FSMContext):
-    """Переключение страницы фото."""
-    page = int(callback.data.split(":")[1])
-    data = await state.get_data()
-    order_id = data.get("order_id")
-    
-    await state.update_data(delete_page=page)
-    
-    async with async_session() as session:
-        service = OrderService(session)
-        order = await service.get_order_by_id(order_id)
-        
-        if order:
-            await callback.message.edit_reply_markup(
-                reply_markup=get_delete_photos_keyboard(order.photos, page=page)
-            )
-    
-    await callback.answer()
 
 
 @router.callback_query(OrderStates.deleting_photos, F.data == "finish_deleting")
-async def finish_deleting(callback: CallbackQuery, state: FSMContext):
+async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Завершение удаления фото."""
     data = await state.get_data()
     order_id = data.get("order_id")
@@ -370,7 +412,10 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext):
         order = await service.get_order_by_id(order_id)
         
         if order and order.photos_count >= MIN_PHOTOS:
-            await show_order_summary(callback.message, order, edit=True)
+            # Удаляем сообщение с фото
+            await callback.message.delete()
+            # Отправляем сводку
+            await show_order_summary_new(bot, callback.from_user.id, order)
             await state.set_state(OrderStates.reviewing_order)
         elif order and order.photos_count > 0:
             await callback.answer(
@@ -378,12 +423,43 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext):
                 f"Сейчас: {order.photos_count}",
                 show_alert=True,
             )
+            return
         else:
-            await callback.message.edit_text(
-                "Выберите формат фотографий:",
+            await callback.message.delete()
+            await bot.send_message(
+                chat_id=callback.from_user.id,
+                text="Выберите формат фотографий:",
                 reply_markup=get_format_keyboard(),
             )
             await state.set_state(OrderStates.selecting_format)
     
     await callback.answer()
+
+
+async def show_order_summary_new(bot: Bot, chat_id: int, order):
+    """Отправляет новое сообщение со сводкой заказа."""
+    photos_by_format = order.photos_by_format()
+    
+    lines = ["<b>📋 Ваш заказ:</b>\n"]
+    
+    for fmt, count in photos_by_format.items():
+        lines.append(f"• {fmt.short_name}: {count} шт.")
+    
+    lines.append(f"\nВсего фото: <b>{order.photos_count}</b> шт.")
+    
+    cost = PricingService.calculate_total_cost(photos_by_format)
+    lines.append(f"\n💰 Предварительная стоимость (без доставки): <b>{cost}₽</b>")
+    
+    hint = PricingService.get_price_optimization_hint(photos_by_format)
+    if hint:
+        lines.append(f"\n{hint}")
+    
+    text = "\n".join(lines)
+    
+    await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=get_order_summary_keyboard(),
+        parse_mode="HTML",
+    )
 

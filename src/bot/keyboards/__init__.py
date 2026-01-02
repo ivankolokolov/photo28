@@ -11,6 +11,7 @@ from src.bot.keyboards.main import (
     get_my_orders_keyboard,
     get_order_detail_keyboard,
     get_delete_photos_keyboard,
+    get_photo_preview_keyboard,
 )
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "get_my_orders_keyboard",
     "get_order_detail_keyboard",
     "get_delete_photos_keyboard",
+    "get_photo_preview_keyboard",
 ]
 
