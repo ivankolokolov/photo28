@@ -1,0 +1,29 @@
+"""Клавиатуры бота."""
+from src.bot.keyboards.main import (
+    get_format_keyboard,
+    get_photo_actions_keyboard,
+    get_order_summary_keyboard,
+    get_delivery_keyboard,
+    get_delivery_confirm_keyboard,
+    get_payment_keyboard,
+    get_promocode_keyboard,
+    get_final_keyboard,
+    get_my_orders_keyboard,
+    get_order_detail_keyboard,
+    get_delete_photos_keyboard,
+)
+
+__all__ = [
+    "get_format_keyboard",
+    "get_photo_actions_keyboard",
+    "get_order_summary_keyboard",
+    "get_delivery_keyboard",
+    "get_delivery_confirm_keyboard",
+    "get_payment_keyboard",
+    "get_promocode_keyboard",
+    "get_final_keyboard",
+    "get_my_orders_keyboard",
+    "get_order_detail_keyboard",
+    "get_delete_photos_keyboard",
+]
+

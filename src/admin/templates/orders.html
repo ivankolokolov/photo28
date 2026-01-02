@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Заказы — Photo28 Admin{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">📋 Заказы</h1>
+
+<div class="filter-tabs">
+    <a href="/orders" class="filter-tab {% if not current_status %}active{% endif %}">Все</a>
+    <a href="/orders?status=pending_payment" class="filter-tab {% if current_status == 'pending_payment' %}active{% endif %}">⏳ Ожидают оплаты</a>
+    <a href="/orders?status=paid" class="filter-tab {% if current_status == 'paid' %}active{% endif %}">✅ Оплачены</a>
+    <a href="/orders?status=printing" class="filter-tab {% if current_status == 'printing' %}active{% endif %}">🖨 В печати</a>
+    <a href="/orders?status=ready" class="filter-tab {% if current_status == 'ready' %}active{% endif %}">📦 Готовы</a>
+    <a href="/orders?status=shipped" class="filter-tab {% if current_status == 'shipped' %}active{% endif %}">🚚 Отправлены</a>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер</th>
+                    <th>Клиент</th>
+                    <th>Статус</th>
+                    <th>Доставка</th>
+                    <th>Фото</th>
+                    <th>Сумма</th>
+                    <th>Дата</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td><strong>{{ order.order_number }}</strong></td>
+                    <td>
+                        {{ order.user.display_name if order.user else '—' }}
+                        {% if order.user and order.user.username %}
+                        <br><small style="color: var(--text-muted);">@{{ order.user.username }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ order.status.value }}">{{ order.status.display_name }}</span>
+                    </td>
+                    <td>{{ order.delivery_type.display_name if order.delivery_type else '—' }}</td>
+                    <td>{{ order.photos_count }} шт.</td>
+                    <td>{{ order.total_cost }}₽</td>
+                    <td>{{ order.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        <a href="/orders/{{ order.id }}" class="btn btn-secondary btn-sm">Открыть</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
+                        Заказов не найдено
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Фото заказа #{{ order.order_number }} — Photo28 Admin{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+    <a href="/orders/{{ order.id }}" style="color: var(--text-muted); text-decoration: none;">← Назад к заказу</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">🖼 Фотографии заказа #{{ order.order_number }}</h2>
+        <span style="color: var(--text-muted);">{{ photos|length }} файлов</span>
+    </div>
+    
+    {% if photos %}
+    <div class="photos-grid">
+        {% for photo in photos %}
+        <div class="photo-item">
+            <a href="/storage/{{ order.order_number }}/{{ photo.name }}" target="_blank">
+                <img src="/storage/{{ order.order_number }}/{{ photo.name }}" alt="{{ photo.name }}">
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+            💡 Для печати откройте фотографии по клику и сохраните или распечатайте напрямую.
+        </p>
+        <p style="color: var(--text-muted);">
+            Путь к файлам на сервере: <code style="background: var(--bg-dark); padding: 0.25rem 0.5rem; border-radius: 4px;">storage/photos/{{ order.order_number }}/</code>
+        </p>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted); text-align: center; padding: 3rem;">
+        Фотографии ещё не скачаны.<br>
+        <a href="/orders/{{ order.id }}/download" class="btn btn-primary" style="margin-top: 1rem;">📥 Скачать из Telegram</a>
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+

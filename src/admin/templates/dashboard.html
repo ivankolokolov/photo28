@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд — Photo28 Admin{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">📊 Дашборд</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_orders }}</div>
+        <div class="stat-label">Всего заказов</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #f59e0b;">{{ stats.pending_payment }}</div>
+        <div class="stat-label">Ожидают оплаты</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #10b981;">{{ stats.paid }}</div>
+        <div class="stat-label">Оплачено</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #3b82f6;">{{ stats.printing }}</div>
+        <div class="stat-label">В печати</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: #8b5cf6;">{{ stats.shipped }}</div>
+        <div class="stat-label">Отправлено</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">💾 Хранилище</h2>
+    </div>
+    <div class="order-meta">
+        <div class="meta-item">
+            <span class="meta-label">Размер</span>
+            <span class="meta-value">{{ storage.total_size_mb }} МБ</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Файлов</span>
+            <span class="meta-value">{{ storage.file_count }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Заказов на диске</span>
+            <span class="meta-value">{{ storage.orders_count }}</span>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">📋 Последние заказы</h2>
+        <a href="/orders" class="btn btn-secondary btn-sm">Все заказы →</a>
+    </div>
+    
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер</th>
+                    <th>Клиент</th>
+                    <th>Статус</th>
+                    <th>Фото</th>
+                    <th>Сумма</th>
+                    <th>Дата</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td><strong>{{ order.order_number }}</strong></td>
+                    <td>{{ order.user.display_name if order.user else '—' }}</td>
+                    <td>
+                        <span class="badge badge-{{ order.status.value }}">{{ order.status.display_name }}</span>
+                    </td>
+                    <td>{{ order.photos_count }} шт.</td>
+                    <td>{{ order.total_cost }}₽</td>
+                    <td>{{ order.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        <a href="/orders/{{ order.id }}" class="btn btn-secondary btn-sm">Открыть</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: var(--text-muted);">
+                        Заказов пока нет
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+

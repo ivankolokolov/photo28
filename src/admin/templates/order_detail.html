@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Заказ #{{ order.order_number }} — Photo28 Admin{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+    <a href="/orders" style="color: var(--text-muted); text-decoration: none;">← Назад к заказам</a>
+</div>
+
+<div class="card">
+    <div class="order-header">
+        <div>
+            <h1 class="order-number">Заказ #{{ order.order_number }}</h1>
+            <span class="badge badge-{{ order.status.value }}" style="margin-top: 0.5rem;">{{ order.status.display_name }}</span>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="/orders/{{ order.id }}/download" class="btn btn-secondary btn-sm">📥 Скачать фото</a>
+            <form method="post" action="/orders/{{ order.id }}/upload-yandex" style="display: inline;">
+                <button type="submit" class="btn btn-secondary btn-sm">☁️ Загрузить на Я.Диск</button>
+            </form>
+            <a href="/orders/{{ order.id }}/photos" class="btn btn-secondary btn-sm">🖼 Просмотр фото</a>
+        </div>
+    </div>
+    
+    <div class="order-meta">
+        <div class="meta-item">
+            <span class="meta-label">Клиент</span>
+            <span class="meta-value">{{ order.user.display_name if order.user else '—' }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Telegram</span>
+            <span class="meta-value">
+                {% if order.user and order.user.username %}
+                <a href="https://t.me/{{ order.user.username }}" target="_blank" style="color: var(--accent);">@{{ order.user.username }}</a>
+                {% else %}
+                ID: {{ order.user.telegram_id if order.user else '—' }}
+                {% endif %}
+            </span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Создан</span>
+            <span class="meta-value">{{ order.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+        </div>
+        {% if order.paid_at %}
+        <div class="meta-item">
+            <span class="meta-label">Оплачен</span>
+            <span class="meta-value">{{ order.paid_at.strftime('%d.%m.%Y %H:%M') }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">📷 Фотографии</h2>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Формат</th>
+                <th>Количество</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for format, count in order.photos_by_format().items() %}
+            <tr>
+                <td>{{ format.display_name }}</td>
+                <td>{{ count }} шт.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td><strong>Всего</strong></td>
+                <td><strong>{{ order.photos_count }} шт.</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">🚚 Доставка</h2>
+    </div>
+    
+    <div class="order-meta">
+        <div class="meta-item">
+            <span class="meta-label">Способ</span>
+            <span class="meta-value">{{ order.delivery_type.display_name if order.delivery_type else 'Не выбран' }}</span>
+        </div>
+        {% if order.delivery_city %}
+        <div class="meta-item">
+            <span class="meta-label">Город</span>
+            <span class="meta-value">{{ order.delivery_city }}</span>
+        </div>
+        {% endif %}
+        {% if order.delivery_address %}
+        <div class="meta-item">
+            <span class="meta-label">Адрес</span>
+            <span class="meta-value">{{ order.delivery_address }}</span>
+        </div>
+        {% endif %}
+        {% if order.delivery_phone %}
+        <div class="meta-item">
+            <span class="meta-label">Телефон</span>
+            <span class="meta-value">{{ order.delivery_phone }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">💰 Стоимость</h2>
+    </div>
+    
+    <div class="order-meta">
+        <div class="meta-item">
+            <span class="meta-label">Фотографии</span>
+            <span class="meta-value">{{ order.photos_cost }}₽</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Доставка</span>
+            <span class="meta-value">{{ order.delivery_cost }}₽</span>
+        </div>
+        {% if order.discount > 0 %}
+        <div class="meta-item">
+            <span class="meta-label">Скидка</span>
+            <span class="meta-value" style="color: var(--success);">-{{ order.discount }}₽</span>
+        </div>
+        {% endif %}
+        <div class="meta-item">
+            <span class="meta-label">Итого</span>
+            <span class="meta-value" style="font-size: 1.5rem; color: var(--accent);">{{ order.total_cost }}₽</span>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">⚙️ Изменить статус</h2>
+    </div>
+    
+    <form method="post" action="/orders/{{ order.id }}/status" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <select name="status" class="form-select" style="width: auto; min-width: 200px;">
+            {% for status in statuses %}
+            {% if status.value != 'draft' %}
+            <option value="{{ status.value }}" {% if order.status == status %}selected{% endif %}>
+                {{ status.display_name }}
+            </option>
+            {% endif %}
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </form>
+</div>
+{% endblock %}
+

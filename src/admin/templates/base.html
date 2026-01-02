@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Photo28 Admin{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <a href="/" class="logo">📷 Photo28 Admin</a>
+        <nav class="nav">
+            <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Дашборд</a>
+            <a href="/orders" {% if "/orders" in request.url.path %}class="active"{% endif %}>Заказы</a>
+            <a href="/promocodes" {% if request.url.path == "/promocodes" %}class="active"{% endif %}>Промокоды</a>
+            <a href="/logout">Выход</a>
+        </nav>
+    </header>
+    
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
+
