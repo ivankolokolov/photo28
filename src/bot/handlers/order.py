@@ -171,6 +171,43 @@ async def handle_document(message: Message, state: FSMContext, bot: Bot):
     await _add_photo_to_batch(message, state, bot, file_id, is_document=True)
 
 
+@router.message(OrderStates.uploading_photos, F.video | F.video_note | F.animation)
+async def handle_video_rejected(message: Message):
+    """Отклонение видео."""
+    await message.answer(
+        "⚠️ Видео не поддерживается.\n"
+        "Пожалуйста, отправляйте только фотографии (JPG, PNG, HEIC)."
+    )
+
+
+@router.message(OrderStates.uploading_photos, F.audio | F.voice)
+async def handle_audio_rejected(message: Message):
+    """Отклонение аудио."""
+    await message.answer(
+        "⚠️ Аудио не поддерживается.\n"
+        "Пожалуйста, отправляйте только фотографии."
+    )
+
+
+@router.message(OrderStates.uploading_photos, F.sticker)
+async def handle_sticker_rejected(message: Message):
+    """Отклонение стикеров."""
+    await message.answer(
+        "⚠️ Стикеры не поддерживаются.\n"
+        "Пожалуйста, отправляйте фотографии."
+    )
+
+
+@router.message(OrderStates.uploading_photos, F.text)
+async def handle_text_in_upload(message: Message):
+    """Текст в режиме загрузки фото."""
+    await message.answer(
+        "📷 Сейчас я жду фотографии.\n"
+        "Отправьте фото или нажмите кнопку ниже.",
+        reply_markup=get_photo_actions_keyboard(has_photos=True),
+    )
+
+
 @router.callback_query(F.data == "add_another_format")
 async def add_another_format(callback: CallbackQuery, state: FSMContext):
     """Добавить фото другого формата."""
