@@ -63,6 +63,9 @@ class Photo(Base):
     # Порядковый номер фото в заказе
     position: Mapped[int] = mapped_column(Integer, default=0)
     
+    # Тип файла: True если отправлен как документ (без сжатия)
+    is_document: Mapped[bool] = mapped_column(default=False)
+    
     # Relationships
     order: Mapped["Order"] = relationship(back_populates="photos")
     

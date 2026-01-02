@@ -190,6 +190,7 @@ class OrderService:
         photo_format: PhotoFormat,
         telegram_file_id: str,
         local_path: Optional[str] = None,
+        is_document: bool = False,
     ) -> Photo:
         """Добавляет фотографию в заказ."""
         # Определяем позицию
@@ -201,6 +202,7 @@ class OrderService:
             telegram_file_id=telegram_file_id,
             local_path=local_path,
             position=position,
+            is_document=is_document,
         )
         self.session.add(photo)
         await self.session.commit()

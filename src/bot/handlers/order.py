@@ -2,7 +2,7 @@
 import asyncio
 from typing import Dict
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaDocument
 from aiogram.fsm.context import FSMContext
 
 from src.bot.states import OrderStates
@@ -20,8 +20,11 @@ from src.models.photo import PhotoFormat
 
 router = Router()
 
-# Словарь для отслеживания пачек фото: {user_id: {"task": Task, "count": int, "last_total": int}}
-_photo_batch_tasks: Dict[int, dict] = {}
+# Словарь для отслеживания media_group: {media_group_id: {"task": Task, "count": int, "user_id": int, "order_id": int}}
+_media_groups: Dict[str, dict] = {}
+
+# Словарь для отслеживания одиночных фото (без media_group_id): {user_id: {"task": Task, "count": int}}
+_single_photo_tasks: Dict[int, dict] = {}
 
 UPLOAD_MESSAGE = """📸 Пожалуйста, ознакомьтесь с тем, как будут кадрироваться фото:
 https://dariakis28.ru/kadrirovanie-fotografiy
@@ -63,18 +66,20 @@ async def select_format(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-async def _send_batch_confirmation(
+async def _send_media_group_confirmation(
     bot: Bot,
-    user_id: int,
-    order_id: int,
-    batch_count: int,
+    media_group_id: str,
 ):
-    """Отправляет сообщение о добавленных фото после задержки."""
-    await asyncio.sleep(1.5)  # Ждём 1.5 секунды после последнего фото
+    """Отправляет сообщение о добавленных фото из альбома после короткой задержки."""
+    await asyncio.sleep(0.5)  # Короткая задержка для сбора всех фото из альбома
     
-    # Проверяем, что задача ещё актуальна
-    if user_id not in _photo_batch_tasks:
+    group_info = _media_groups.pop(media_group_id, None)
+    if not group_info:
         return
+    
+    user_id = group_info["user_id"]
+    order_id = group_info["order_id"]
+    added_count = group_info.get("count", 1)
     
     # Получаем актуальное количество фото
     async with async_session() as session:
@@ -84,11 +89,39 @@ async def _send_batch_confirmation(
             return
         photos_count = order.photos_count
     
-    batch_info = _photo_batch_tasks.pop(user_id, None)
-    if not batch_info:
+    if added_count > 1:
+        text = f"✅ Добавлено {added_count} фото! Всего загружено: {photos_count} шт."
+    else:
+        text = f"✅ Фото добавлено! Всего загружено: {photos_count} шт."
+    
+    await bot.send_message(
+        chat_id=user_id,
+        text=f"{text}\n\nПродолжайте отправлять фото или выберите действие:",
+        reply_markup=get_photo_actions_keyboard(has_photos=True),
+    )
+
+
+async def _send_single_photo_confirmation(
+    bot: Bot,
+    user_id: int,
+    order_id: int,
+):
+    """Отправляет сообщение о добавленном одиночном фото."""
+    await asyncio.sleep(0.3)  # Небольшая задержка на случай быстрой отправки
+    
+    single_info = _single_photo_tasks.pop(user_id, None)
+    if not single_info:
         return
     
-    added_count = batch_info.get("count", 1)
+    added_count = single_info.get("count", 1)
+    
+    # Получаем актуальное количество фото
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        if not order:
+            return
+        photos_count = order.photos_count
     
     if added_count > 1:
         text = f"✅ Добавлено {added_count} фото! Всего загружено: {photos_count} шт."
@@ -114,6 +147,7 @@ async def _add_photo_to_batch(
     order_id = data.get("order_id")
     current_format = data.get("current_format")
     user_id = message.from_user.id
+    media_group_id = message.media_group_id
     
     if not order_id or not current_format:
         await message.answer("Ошибка. Пожалуйста, начните заново: /start")
@@ -130,22 +164,42 @@ async def _add_photo_to_batch(
             return
         
         # Добавляем фото
-        await service.add_photo(order, photo_format, file_id)
+        await service.add_photo(order, photo_format, file_id, is_document=is_document)
     
-    # Отменяем предыдущую задачу отправки сообщения, если есть
-    if user_id in _photo_batch_tasks:
-        old_task = _photo_batch_tasks[user_id].get("task")
-        if old_task and not old_task.done():
-            old_task.cancel()
-        _photo_batch_tasks[user_id]["count"] += 1
+    # Если это фото из альбома (media_group)
+    if media_group_id:
+        if media_group_id in _media_groups:
+            # Отменяем предыдущую задачу
+            old_task = _media_groups[media_group_id].get("task")
+            if old_task and not old_task.done():
+                old_task.cancel()
+            _media_groups[media_group_id]["count"] += 1
+        else:
+            _media_groups[media_group_id] = {
+                "count": 1,
+                "user_id": user_id,
+                "order_id": order_id,
+            }
+        
+        # Создаём новую задачу
+        task = asyncio.create_task(
+            _send_media_group_confirmation(bot, media_group_id)
+        )
+        _media_groups[media_group_id]["task"] = task
     else:
-        _photo_batch_tasks[user_id] = {"count": 1}
-    
-    # Создаём новую задачу с задержкой
-    task = asyncio.create_task(
-        _send_batch_confirmation(bot, user_id, order_id, _photo_batch_tasks[user_id]["count"])
-    )
-    _photo_batch_tasks[user_id]["task"] = task
+        # Одиночное фото
+        if user_id in _single_photo_tasks:
+            old_task = _single_photo_tasks[user_id].get("task")
+            if old_task and not old_task.done():
+                old_task.cancel()
+            _single_photo_tasks[user_id]["count"] += 1
+        else:
+            _single_photo_tasks[user_id] = {"count": 1}
+        
+        task = asyncio.create_task(
+            _send_single_photo_confirmation(bot, user_id, order_id)
+        )
+        _single_photo_tasks[user_id]["task"] = task
 
 
 @router.message(OrderStates.uploading_photos, F.photo)
@@ -328,6 +382,41 @@ async def back_to_summary(callback: CallbackQuery, state: FSMContext):
 
 # === Удаление фото ===
 
+def _get_photo_caption(photo, idx: int, total: int, extra_text: str = "") -> str:
+    """Формирует подпись для фото при удалении."""
+    caption = (
+        f"🗑 <b>Удаление фото</b>\n\n"
+        f"Фото {idx + 1} из {total}\n"
+        f"Формат: {photo.format.short_name}"
+    )
+    if extra_text:
+        caption += f"\n\n{extra_text}"
+    return caption
+
+
+async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: int, extra_text: str = ""):
+    """Отправляет превью фото (photo или document)."""
+    caption = _get_photo_caption(photo, idx, total, extra_text)
+    keyboard = get_photo_preview_keyboard(photo, idx, total)
+    
+    if photo.is_document:
+        await bot.send_document(
+            chat_id=chat_id,
+            document=photo.telegram_file_id,
+            caption=caption,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    else:
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=photo.telegram_file_id,
+            caption=caption,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+
 @router.callback_query(F.data == "delete_photos")
 async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Начало удаления фото — показываем первое фото с превью."""
@@ -350,26 +439,19 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: B
         
         # Отправляем первое фото с превью
         photo = order.photos[0]
-        await bot.send_photo(
-            chat_id=callback.from_user.id,
-            photo=photo.telegram_file_id,
-            caption=f"🗑 <b>Удаление фото</b>\n\n"
-                    f"Фото {1} из {len(order.photos)}\n"
-                    f"Формат: {photo.format.short_name}",
-            reply_markup=get_photo_preview_keyboard(photo, 0, len(order.photos)),
-            parse_mode="HTML",
-        )
+        await _send_photo_preview(bot, callback.from_user.id, photo, 0, len(order.photos))
     
     await state.set_state(OrderStates.deleting_photos)
     await callback.answer()
 
 
 @router.callback_query(OrderStates.deleting_photos, F.data.startswith("preview_photo:"))
-async def preview_photo(callback: CallbackQuery, state: FSMContext):
+async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Переход к другому фото для превью."""
     idx = int(callback.data.split(":")[1])
     data = await state.get_data()
     order_id = data.get("order_id")
+    current_idx = data.get("delete_photo_idx", 0)
     
     async with async_session() as session:
         service = OrderService(session)
@@ -386,18 +468,23 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext):
         await state.update_data(delete_photo_idx=idx)
         
         photo = order.photos[idx]
+        current_photo = order.photos[current_idx] if current_idx < len(order.photos) else None
         
-        # Редактируем медиа и клавиатуру
-        await callback.message.edit_media(
-            media=InputMediaPhoto(
-                media=photo.telegram_file_id,
-                caption=f"🗑 <b>Удаление фото</b>\n\n"
-                        f"Фото {idx + 1} из {len(order.photos)}\n"
-                        f"Формат: {photo.format.short_name}",
-                parse_mode="HTML",
-            ),
-            reply_markup=get_photo_preview_keyboard(photo, idx, len(order.photos)),
-        )
+        # Если тип файла совпадает, можно использовать edit_media
+        if current_photo and current_photo.is_document == photo.is_document:
+            media_class = InputMediaDocument if photo.is_document else InputMediaPhoto
+            await callback.message.edit_media(
+                media=media_class(
+                    media=photo.telegram_file_id,
+                    caption=_get_photo_caption(photo, idx, len(order.photos)),
+                    parse_mode="HTML",
+                ),
+                reply_markup=get_photo_preview_keyboard(photo, idx, len(order.photos)),
+            )
+        else:
+            # Типы разные — удаляем и отправляем заново
+            await callback.message.delete()
+            await _send_photo_preview(bot, callback.from_user.id, photo, idx, len(order.photos))
     
     await callback.answer()
 
@@ -423,6 +510,10 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
         if not order:
             await callback.answer("Заказ не найден")
             return
+        
+        # Запоминаем тип текущего фото для сравнения
+        current_photo = order.photos[current_idx] if current_idx < len(order.photos) else None
+        current_is_document = current_photo.is_document if current_photo else False
         
         # Находим и удаляем фото
         photo_to_delete = None
@@ -455,19 +546,25 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await state.update_data(delete_photo_idx=current_idx)
             
             photo = order.photos[current_idx]
+            extra_text = f"✅ Фото удалено! Осталось: {len(order.photos)}"
             
-            # Обновляем превью
-            await callback.message.edit_media(
-                media=InputMediaPhoto(
-                    media=photo.telegram_file_id,
-                    caption=f"🗑 <b>Удаление фото</b>\n\n"
-                            f"Фото {current_idx + 1} из {len(order.photos)}\n"
-                            f"Формат: {photo.format.short_name}\n\n"
-                            f"✅ Фото удалено! Осталось: {len(order.photos)}",
-                    parse_mode="HTML",
-                ),
-                reply_markup=get_photo_preview_keyboard(photo, current_idx, len(order.photos)),
-            )
+            # Если тип файла совпадает, можно использовать edit_media
+            if current_is_document == photo.is_document:
+                media_class = InputMediaDocument if photo.is_document else InputMediaPhoto
+                await callback.message.edit_media(
+                    media=media_class(
+                        media=photo.telegram_file_id,
+                        caption=_get_photo_caption(photo, current_idx, len(order.photos), extra_text),
+                        parse_mode="HTML",
+                    ),
+                    reply_markup=get_photo_preview_keyboard(photo, current_idx, len(order.photos)),
+                )
+            else:
+                # Типы разные — удаляем и отправляем заново
+                await callback.message.delete()
+                await _send_photo_preview(
+                    bot, callback.from_user.id, photo, current_idx, len(order.photos), extra_text
+                )
 
 
 @router.callback_query(OrderStates.deleting_photos, F.data == "finish_deleting")
