@@ -7,8 +7,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from src.config import settings
-from src.database import init_db
+from src.database import init_db, async_session
 from src.bot.handlers import setup_routers
+from src.services.settings_service import SettingsService
 
 
 # Настройка логирования
@@ -24,6 +25,13 @@ async def main():
     # Инициализация базы данных
     logger.info("Инициализация базы данных...")
     await init_db()
+    
+    # Загрузка настроек в кеш
+    logger.info("Загрузка настроек...")
+    async with async_session() as session:
+        settings_service = SettingsService(session)
+        await settings_service.load_cache()
+    logger.info("Настройки загружены")
     
     # Создаём директории для хранения файлов
     settings.ensure_dirs()

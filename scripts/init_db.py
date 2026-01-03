@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.database import init_db, async_session
 from src.services.order_service import OrderService
+from src.services.settings_service import SettingsService, DEFAULT_SETTINGS, SettingType
 
 
 async def main():
@@ -16,6 +17,27 @@ async def main():
     print("🔧 Инициализация базы данных...")
     await init_db()
     print("✅ Таблицы созданы!")
+    
+    # Создаём настройки по умолчанию
+    print("\n⚙️ Создание настроек по умолчанию...")
+    async with async_session() as session:
+        settings_service = SettingsService(session)
+        
+        for setting_data in DEFAULT_SETTINGS:
+            existing = await settings_service.get_by_key(setting_data["key"])
+            if not existing:
+                await settings_service.create_setting(
+                    key=setting_data["key"],
+                    value=setting_data["value"],
+                    value_type=setting_data["value_type"],
+                    display_name=setting_data["display_name"],
+                    description=setting_data.get("description", ""),
+                    group=setting_data.get("group", "general"),
+                    sort_order=setting_data.get("sort_order", 0),
+                )
+                print(f"  ✅ {setting_data['display_name']}")
+            else:
+                print(f"  ⏭️ {setting_data['display_name']} (уже существует)")
     
     # Создаём тестовый промокод
     print("\n🎟 Создание тестового промокода...")

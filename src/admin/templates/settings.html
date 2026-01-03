@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>⚙️ Настройки</h1>
+</div>
+
+{% if saved %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    ✅ Настройки сохранены!
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<form method="POST" action="/settings">
+    {% for group_key, settings_list in grouped_settings.items() %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">{{ group_names.get(group_key, group_key) }}</h5>
+        </div>
+        <div class="card-body">
+            {% for setting in settings_list %}
+            <div class="mb-3 row">
+                <label for="setting_{{ setting.key }}" class="col-sm-4 col-form-label">
+                    {{ setting.display_name }}
+                </label>
+                <div class="col-sm-8">
+                    {% if setting.key == 'preview_mode' %}
+                    <select class="form-select" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
+                        <option value="thumbnail" {% if setting.value == 'thumbnail' %}selected{% endif %}>
+                            thumbnail — показывать как фото (медленнее)
+                        </option>
+                        <option value="document" {% if setting.value == 'document' %}selected{% endif %}>
+                            document — показывать как документ (быстрее)
+                        </option>
+                    </select>
+                    {% elif setting.value_type.value == 'boolean' %}
+                    <select class="form-select" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
+                        <option value="true" {% if setting.value.lower() in ['true', '1', 'yes', 'да'] %}selected{% endif %}>Да</option>
+                        <option value="false" {% if setting.value.lower() not in ['true', '1', 'yes', 'да'] %}selected{% endif %}>Нет</option>
+                    </select>
+                    {% elif setting.value_type.value == 'text' %}
+                    <textarea class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" rows="3">{{ setting.value }}</textarea>
+                    {% elif setting.value_type.value == 'integer' %}
+                    <input type="number" class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
+                    {% else %}
+                    <input type="text" class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
+                    {% endif %}
+                    {% if setting.description %}
+                    <div class="form-text text-muted">{{ setting.description }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+        <button type="submit" class="btn btn-primary btn-lg">
+            💾 Сохранить настройки
+        </button>
+    </div>
+</form>
+
+<div class="alert alert-info mt-4">
+    <strong>ℹ️ Примечание:</strong> После изменения настроек может потребоваться перезапуск бота для применения некоторых изменений.
+</div>
+{% endblock %}
+

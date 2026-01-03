@@ -15,6 +15,7 @@ from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.file_service import FileService
 from src.services.yandex_disk import YandexDiskService
+from src.services.settings_service import SettingsService
 from src.models.order import OrderStatus
 
 # Создаём приложение
@@ -353,4 +354,61 @@ async def create_promocode(
         )
     
     return RedirectResponse("/promocodes", status_code=303)
+
+
+# === Настройки ===
+
+SETTING_GROUPS = {
+    "general": "Основные",
+    "delivery": "Доставка",
+    "contacts": "Контакты",
+}
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, saved: str = None):
+    """Страница настроек."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    async with async_session() as session:
+        service = SettingsService(session)
+        all_settings = await service.get_all()
+        
+        # Группируем настройки
+        grouped = {}
+        for setting in all_settings:
+            group = setting.group
+            if group not in grouped:
+                grouped[group] = []
+            grouped[group].append(setting)
+    
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "grouped_settings": grouped,
+            "group_names": SETTING_GROUPS,
+            "saved": saved == "1",
+        },
+    )
+
+
+@app.post("/settings")
+async def save_settings(request: Request):
+    """Сохранение настроек."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    form_data = await request.form()
+    
+    async with async_session() as session:
+        service = SettingsService(session)
+        
+        for key, value in form_data.items():
+            if key.startswith("setting_"):
+                setting_key = key[8:]  # Убираем префикс "setting_"
+                await service.set_value(setting_key, value)
+    
+    return RedirectResponse("/settings?saved=1", status_code=303)
 

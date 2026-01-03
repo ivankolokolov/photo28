@@ -2,7 +2,7 @@
 import asyncio
 from typing import Dict
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaDocument
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 
 from src.bot.states import OrderStates
@@ -10,12 +10,12 @@ from src.bot.keyboards import (
     get_format_keyboard,
     get_photo_actions_keyboard,
     get_order_summary_keyboard,
-    get_delete_photos_keyboard,
     get_photo_preview_keyboard,
 )
 from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.pricing import PricingService
+from src.services.settings_service import SettingsService, SettingKeys
 from src.models.photo import PhotoFormat
 
 router = Router()
@@ -33,7 +33,10 @@ https://dariakis28.ru/kadrirovanie-fotografiy
 
 Пришлите мне фото. Чтобы сохранить качество — присылайте файлами "без сжатия" 📎"""
 
-MIN_PHOTOS = 10
+
+def get_min_photos() -> int:
+    """Получает минимальное количество фото из настроек."""
+    return SettingsService.get_int(SettingKeys.MIN_PHOTOS, 10)
 
 
 @router.callback_query(F.data.startswith("format:"))
@@ -141,6 +144,7 @@ async def _add_photo_to_batch(
     bot: Bot,
     file_id: str,
     is_document: bool = False,
+    thumbnail_file_id: str = None,
 ):
     """Добавляет фото в заказ и планирует отправку подтверждения."""
     data = await state.get_data()
@@ -164,7 +168,11 @@ async def _add_photo_to_batch(
             return
         
         # Добавляем фото
-        await service.add_photo(order, photo_format, file_id, is_document=is_document)
+        await service.add_photo(
+            order, photo_format, file_id,
+            is_document=is_document,
+            thumbnail_file_id=thumbnail_file_id,
+        )
     
     # Если это фото из альбома (media_group)
     if media_group_id:
@@ -205,8 +213,12 @@ async def _add_photo_to_batch(
 @router.message(OrderStates.uploading_photos, F.photo)
 async def handle_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка загруженного фото (сжатого)."""
+    # Берём максимальный размер для хранения
     file_id = message.photo[-1].file_id
-    await _add_photo_to_batch(message, state, bot, file_id, is_document=False)
+    # Для превью берём средний размер (или минимальный если только 1-2 размера)
+    thumb_idx = min(1, len(message.photo) - 1)
+    thumbnail_file_id = message.photo[thumb_idx].file_id
+    await _add_photo_to_batch(message, state, bot, file_id, is_document=False, thumbnail_file_id=thumbnail_file_id)
 
 
 @router.message(OrderStates.uploading_photos, F.document)
@@ -222,7 +234,9 @@ async def handle_document(message: Message, state: FSMContext, bot: Bot):
         return
     
     file_id = message.document.file_id
-    await _add_photo_to_batch(message, state, bot, file_id, is_document=True)
+    # Берём thumbnail документа для превью
+    thumbnail_file_id = message.document.thumbnail.file_id if message.document.thumbnail else None
+    await _add_photo_to_batch(message, state, bot, file_id, is_document=True, thumbnail_file_id=thumbnail_file_id)
 
 
 @router.message(OrderStates.uploading_photos, F.video | F.video_note | F.animation)
@@ -289,9 +303,10 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext):
             return
         
         # Проверяем минимальное количество
-        if order.photos_count < MIN_PHOTOS:
+        min_photos = get_min_photos()
+        if order.photos_count < min_photos:
             await callback.answer(
-                f"Минимальный заказ {MIN_PHOTOS} фото любого формата.",
+                f"Минимальный заказ {min_photos} фото любого формата.",
                 show_alert=True,
             )
             return
@@ -395,11 +410,32 @@ def _get_photo_caption(photo, idx: int, total: int, extra_text: str = "") -> str
 
 
 async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: int, extra_text: str = ""):
-    """Отправляет превью фото (photo или document)."""
+    """Отправляет превью фото."""
     caption = _get_photo_caption(photo, idx, total, extra_text)
-    keyboard = get_photo_preview_keyboard(photo, idx, total)
+    keyboard = get_photo_preview_keyboard(photo.id, idx, total)
+    
+    # Получаем режим превью из настроек
+    preview_mode = SettingsService.get(SettingKeys.PREVIEW_MODE, "thumbnail")
     
     if photo.is_document:
+        if preview_mode == "thumbnail" and photo.thumbnail_file_id:
+            # Режим thumbnail — скачиваем и отправляем как фото
+            try:
+                file = await bot.get_file(photo.thumbnail_file_id)
+                file_data = await bot.download_file(file.file_path)
+                photo_input = BufferedInputFile(file_data.read(), filename="preview.jpg")
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_input,
+                    caption=caption,
+                    reply_markup=keyboard,
+                    parse_mode="HTML",
+                )
+                return
+            except Exception:
+                pass  # Fallback к документу
+        
+        # Режим document или fallback — отправляем как документ
         await bot.send_document(
             chat_id=chat_id,
             document=photo.telegram_file_id,
@@ -408,9 +444,11 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
             parse_mode="HTML",
         )
     else:
+        # Обычное фото — используем thumbnail или оригинал
+        preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
         await bot.send_photo(
             chat_id=chat_id,
-            photo=photo.telegram_file_id,
+            photo=preview_file_id,
             caption=caption,
             reply_markup=keyboard,
             parse_mode="HTML",
@@ -451,7 +489,6 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
     idx = int(callback.data.split(":")[1])
     data = await state.get_data()
     order_id = data.get("order_id")
-    current_idx = data.get("delete_photo_idx", 0)
     
     async with async_session() as session:
         service = OrderService(session)
@@ -468,30 +505,32 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
         await state.update_data(delete_photo_idx=idx)
         
         photo = order.photos[idx]
+        current_idx = data.get("delete_photo_idx", 0)
         current_photo = order.photos[current_idx] if current_idx < len(order.photos) else None
         
-        # Если тип файла совпадает, можно использовать edit_media
-        if current_photo and current_photo.is_document == photo.is_document:
-            media_class = InputMediaDocument if photo.is_document else InputMediaPhoto
+        # Если оба фото одного типа и это не документ — можно edit_media
+        same_type = current_photo and (current_photo.is_document == photo.is_document)
+        if same_type and not photo.is_document:
+            preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
             await callback.message.edit_media(
-                media=media_class(
-                    media=photo.telegram_file_id,
+                media=InputMediaPhoto(
+                    media=preview_file_id,
                     caption=_get_photo_caption(photo, idx, len(order.photos)),
                     parse_mode="HTML",
                 ),
-                reply_markup=get_photo_preview_keyboard(photo, idx, len(order.photos)),
+                reply_markup=get_photo_preview_keyboard(photo.id, idx, len(order.photos)),
             )
         else:
-            # Типы разные — удаляем и отправляем заново
+            # Разные типы или документ — удаляем и отправляем заново
             await callback.message.delete()
             await _send_photo_preview(bot, callback.from_user.id, photo, idx, len(order.photos))
     
     await callback.answer()
 
 
-@router.callback_query(OrderStates.deleting_photos, F.data == "noop")
-async def noop_handler(callback: CallbackQuery):
-    """Пустой обработчик для кнопки-счётчика."""
+@router.callback_query(OrderStates.deleting_photos, F.data == "nav_disabled")
+async def nav_disabled_handler(callback: CallbackQuery):
+    """Неактивная кнопка навигации."""
     await callback.answer()
 
 
@@ -510,10 +549,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
         if not order:
             await callback.answer("Заказ не найден")
             return
-        
-        # Запоминаем тип текущего фото для сравнения
-        current_photo = order.photos[current_idx] if current_idx < len(order.photos) else None
-        current_is_document = current_photo.is_document if current_photo else False
         
         # Находим и удаляем фото
         photo_to_delete = None
@@ -548,19 +583,19 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             photo = order.photos[current_idx]
             extra_text = f"✅ Фото удалено! Осталось: {len(order.photos)}"
             
-            # Если тип файла совпадает, можно использовать edit_media
-            if current_is_document == photo.is_document:
-                media_class = InputMediaDocument if photo.is_document else InputMediaPhoto
+            # Документы нельзя показать через edit_media с InputMediaPhoto
+            if not photo.is_document:
+                preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
                 await callback.message.edit_media(
-                    media=media_class(
-                        media=photo.telegram_file_id,
+                    media=InputMediaPhoto(
+                        media=preview_file_id,
                         caption=_get_photo_caption(photo, current_idx, len(order.photos), extra_text),
                         parse_mode="HTML",
                     ),
-                    reply_markup=get_photo_preview_keyboard(photo, current_idx, len(order.photos)),
+                    reply_markup=get_photo_preview_keyboard(photo.id, current_idx, len(order.photos)),
                 )
             else:
-                # Типы разные — удаляем и отправляем заново
+                # Документ — удаляем сообщение и отправляем заново
                 await callback.message.delete()
                 await _send_photo_preview(
                     bot, callback.from_user.id, photo, current_idx, len(order.photos), extra_text
@@ -577,7 +612,8 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
         service = OrderService(session)
         order = await service.get_order_by_id(order_id)
         
-        if order and order.photos_count >= MIN_PHOTOS:
+        min_photos = get_min_photos()
+        if order and order.photos_count >= min_photos:
             # Удаляем сообщение с фото
             await callback.message.delete()
             # Отправляем сводку
@@ -585,7 +621,7 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await state.set_state(OrderStates.reviewing_order)
         elif order and order.photos_count > 0:
             await callback.answer(
-                f"Минимальный заказ {MIN_PHOTOS} фото. "
+                f"Минимальный заказ {min_photos} фото. "
                 f"Сейчас: {order.photos_count}",
                 show_alert=True,
             )

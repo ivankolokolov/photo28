@@ -66,6 +66,9 @@ class Photo(Base):
     # Тип файла: True если отправлен как документ (без сжатия)
     is_document: Mapped[bool] = mapped_column(default=False)
     
+    # File ID миниатюры для быстрого превью
+    thumbnail_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     # Relationships
     order: Mapped["Order"] = relationship(back_populates="photos")
     

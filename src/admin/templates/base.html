@@ -16,6 +16,7 @@
             <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Дашборд</a>
             <a href="/orders" {% if "/orders" in request.url.path %}class="active"{% endif %}>Заказы</a>
             <a href="/promocodes" {% if request.url.path == "/promocodes" %}class="active"{% endif %}>Промокоды</a>
+            <a href="/settings" {% if request.url.path == "/settings" %}class="active"{% endif %}>⚙️ Настройки</a>
             <a href="/logout">Выход</a>
         </nav>
     </header>

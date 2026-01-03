@@ -3,7 +3,7 @@ from typing import List, Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.models.photo import PhotoFormat, Photo
+from src.models.photo import PhotoFormat
 from src.models.order import Order
 
 
@@ -257,80 +257,63 @@ def get_order_detail_keyboard(order: Order) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_photo_preview_keyboard(photo: Photo, current_idx: int, total: int) -> InlineKeyboardMarkup:
+def get_photo_preview_keyboard(photo_id: int, current_idx: int, total: int) -> InlineKeyboardMarkup:
     """Клавиатура для превью фото при удалении."""
     builder = InlineKeyboardBuilder()
     
-    # Кнопка удаления
-    builder.row(
-        InlineKeyboardButton(
-            text="🗑 Удалить это фото",
-            callback_data=f"delete_photo:{photo.id}"
-        )
-    )
+    # Кнопки ±10 (только если фото > 20)
+    if total > 20:
+        skip_buttons = []
+        if current_idx >= 10:
+            skip_buttons.append(
+                InlineKeyboardButton(text="⏪ -10", callback_data=f"preview_photo:{current_idx - 10}")
+            )
+        else:
+            skip_buttons.append(
+                InlineKeyboardButton(text="⏪ -10", callback_data="nav_disabled")
+            )
+        if current_idx + 10 < total:
+            skip_buttons.append(
+                InlineKeyboardButton(text="+10 ⏩", callback_data=f"preview_photo:{current_idx + 10}")
+            )
+        else:
+            skip_buttons.append(
+                InlineKeyboardButton(text="+10 ⏩", callback_data="nav_disabled")
+            )
+        builder.row(*skip_buttons)
     
-    # Навигация
+    # Кнопки ±1
     nav_buttons = []
     if current_idx > 0:
         nav_buttons.append(
             InlineKeyboardButton(text="◀️ Пред.", callback_data=f"preview_photo:{current_idx - 1}")
         )
-    
-    nav_buttons.append(
-        InlineKeyboardButton(text=f"{current_idx + 1}/{total}", callback_data="noop")
-    )
-    
+    else:
+        nav_buttons.append(
+            InlineKeyboardButton(text="◀️ Пред.", callback_data="nav_disabled")
+        )
     if current_idx < total - 1:
         nav_buttons.append(
             InlineKeyboardButton(text="След. ▶️", callback_data=f"preview_photo:{current_idx + 1}")
         )
-    
+    else:
+        nav_buttons.append(
+            InlineKeyboardButton(text="След. ▶️", callback_data="nav_disabled")
+        )
     builder.row(*nav_buttons)
+    
+    # Кнопка удаления
+    builder.row(
+        InlineKeyboardButton(
+            text="🗑 Удалить это фото",
+            callback_data=f"delete_photo:{photo_id}"
+        )
+    )
     
     # Завершение
     builder.row(
         InlineKeyboardButton(
-            text="✅ Закончить удаление",
-            callback_data="finish_deleting"
-        )
-    )
-    
-    return builder.as_markup()
-
-
-def get_delete_photos_keyboard(photos: List[Photo], page: int = 0, per_page: int = 5) -> InlineKeyboardMarkup:
-    """Клавиатура удаления фото (старая, для совместимости)."""
-    builder = InlineKeyboardBuilder()
-    
-    start = page * per_page
-    end = start + per_page
-    page_photos = photos[start:end]
-    
-    for photo in page_photos:
-        builder.row(
-            InlineKeyboardButton(
-                text=f"🗑 Фото #{photo.position + 1} ({photo.format.short_name})",
-                callback_data=f"delete_photo:{photo.id}"
-            )
-        )
-    
-    # Навигация по страницам
-    nav_buttons = []
-    if page > 0:
-        nav_buttons.append(
-            InlineKeyboardButton(text="◀️", callback_data=f"photos_page:{page - 1}")
-        )
-    if end < len(photos):
-        nav_buttons.append(
-            InlineKeyboardButton(text="▶️", callback_data=f"photos_page:{page + 1}")
-        )
-    
-    if nav_buttons:
-        builder.row(*nav_buttons)
-    
-    builder.row(
-        InlineKeyboardButton(
-            text="✅ Закончить удаление",
+            text="✅ Готово",
             callback_data="finish_deleting"
         )
     )
