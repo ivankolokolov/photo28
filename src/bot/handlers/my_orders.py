@@ -45,8 +45,9 @@ async def show_my_orders(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(Command("orders"))
+@router.message(Command("myorders"))
 async def cmd_orders(message: Message, state: FSMContext):
-    """Команда /orders для просмотра заказов."""
+    """Команда /orders или /myorders для просмотра заказов."""
     async with async_session() as session:
         service = OrderService(session)
         user = await service.get_or_create_user(
