@@ -95,12 +95,13 @@ class OrderService:
         return result.scalar_one_or_none()
     
     async def get_user_draft_order(self, user: User) -> Optional[Order]:
-        """Получает текущий заказ-черновик пользователя."""
+        """Получает последний заказ-черновик пользователя."""
         query = (
             select(Order)
             .where(Order.user_id == user.id, Order.status == OrderStatus.DRAFT)
             .options(selectinload(Order.photos))
             .order_by(Order.created_at.desc())
+            .limit(1)
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
