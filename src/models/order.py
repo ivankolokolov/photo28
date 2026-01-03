@@ -16,7 +16,8 @@ class OrderStatus(str, Enum):
     """Статусы заказа."""
     DRAFT = "draft"              # Заказ формируется
     PENDING_PAYMENT = "pending_payment"  # Ожидает оплаты
-    PAID = "paid"                # Оплачен
+    PAID = "paid"                # Оплачен, ожидает подтверждения
+    CONFIRMED = "confirmed"      # Оплата подтверждена
     PRINTING = "printing"        # В печати
     READY = "ready"              # Готов к отправке
     SHIPPED = "shipped"          # Отправлен
@@ -29,7 +30,8 @@ class OrderStatus(str, Enum):
         names = {
             OrderStatus.DRAFT: "Формируется",
             OrderStatus.PENDING_PAYMENT: "Ожидает оплаты",
-            OrderStatus.PAID: "Оплачен",
+            OrderStatus.PAID: "Ожидает подтверждения",
+            OrderStatus.CONFIRMED: "Подтверждён",
             OrderStatus.PRINTING: "В печати",
             OrderStatus.READY: "Готов к отправке",
             OrderStatus.SHIPPED: "Отправлен",

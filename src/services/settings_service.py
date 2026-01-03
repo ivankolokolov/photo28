@@ -135,6 +135,9 @@ class SettingKeys:
     PAYMENT_CARD = "payment_card"
     PAYMENT_RECEIVER = "payment_receiver"
     
+    # Уведомления
+    MANAGER_CHAT_ID = "manager_chat_id"  # ID группы менеджеров для уведомлений
+    
     # Системные (не отображаются в UI настроек)
     RESTART_REQUESTED = "restart_requested"  # "true" / "false"
     RESTART_SCHEDULED_TIME = "restart_scheduled_time"  # ISO datetime или пустая строка
@@ -225,6 +228,16 @@ DEFAULT_SETTINGS = [
         "description": "ФИО получателя для подтверждения перевода",
         "group": "contacts",
         "sort_order": 4,
+    },
+    # Уведомления
+    {
+        "key": SettingKeys.MANAGER_CHAT_ID,
+        "value": "",
+        "value_type": SettingType.STRING,
+        "display_name": "ID чата менеджеров",
+        "description": "ID группы/чата для уведомлений о заказах. Используйте /chatid в группе чтобы узнать ID.",
+        "group": "notifications",
+        "sort_order": 1,
     },
     # Системные
     {

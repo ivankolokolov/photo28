@@ -92,6 +92,7 @@ async def dashboard(request: Request):
             "total_orders": len(all_orders),
             "pending_payment": len([o for o in all_orders if o.status == OrderStatus.PENDING_PAYMENT]),
             "paid": len([o for o in all_orders if o.status == OrderStatus.PAID]),
+            "confirmed": len([o for o in all_orders if o.status == OrderStatus.CONFIRMED]),
             "printing": len([o for o in all_orders if o.status == OrderStatus.PRINTING]),
             "shipped": len([o for o in all_orders if o.status == OrderStatus.SHIPPED]),
         }
@@ -403,6 +404,7 @@ SETTING_GROUPS = {
     "general": "Основные",
     "delivery": "Доставка",
     "contacts": "Контакты",
+    "notifications": "Уведомления",
 }
 
 # Группы, которые не показываем в UI настроек

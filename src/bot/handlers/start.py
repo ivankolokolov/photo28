@@ -200,3 +200,21 @@ async def cmd_help(message: Message):
         f"<b>Связь с менеджером:</b> @{settings.manager_username}",
         parse_mode="HTML",
     )
+
+
+@router.message(Command("chatid"))
+async def cmd_chatid(message: Message):
+    """Команда /chatid — показывает ID текущего чата (для настройки уведомлений)."""
+    chat_type = message.chat.type
+    chat_id = message.chat.id
+    chat_title = message.chat.title or "Личный чат"
+    
+    await message.answer(
+        f"<b>📋 Информация о чате</b>\n\n"
+        f"🆔 Chat ID: <code>{chat_id}</code>\n"
+        f"📝 Название: {chat_title}\n"
+        f"📂 Тип: {chat_type}\n\n"
+        f"💡 Скопируйте Chat ID и вставьте в настройки админки\n"
+        f"в поле «ID чата менеджеров»",
+        parse_mode="HTML",
+    )

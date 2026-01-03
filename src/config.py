@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     admin_secret_key: str = Field(default="change_me_in_production", env="ADMIN_SECRET_KEY")
     admin_username: str = Field(default="admin", env="ADMIN_USERNAME")
     admin_password: str = Field(default="admin", env="ADMIN_PASSWORD")
+    admin_url: str = Field(default="", env="ADMIN_URL")  # Например: http://localhost:8080
     
     # Storage paths
     photos_dir: Path = Field(default=Path("./storage/photos"), env="PHOTOS_DIR")

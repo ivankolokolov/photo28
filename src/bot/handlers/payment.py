@@ -1,5 +1,5 @@
 """Обработчики оплаты."""
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
@@ -11,6 +11,7 @@ from src.bot.keyboards import (
 )
 from src.database import async_session
 from src.services.order_service import OrderService
+from src.services.notification_service import NotificationService
 from src.models.order import OrderStatus
 from src.config import settings
 
@@ -202,7 +203,7 @@ async def back_to_promocode(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(OrderStates.waiting_payment_receipt, F.photo)
-async def process_payment_receipt_photo(message: Message, state: FSMContext):
+async def process_payment_receipt_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка квитанции об оплате (фото)."""
     data = await state.get_data()
     order_id = data.get("order_id")
@@ -220,6 +221,10 @@ async def process_payment_receipt_photo(message: Message, state: FSMContext):
         # Сохраняем квитанцию
         order.payment_receipt_file_id = file_id
         await service.update_order_status(order, OrderStatus.PAID)
+        
+        # Отправляем уведомление менеджерам
+        notification_service = NotificationService(bot)
+        await notification_service.notify_receipt_uploaded(order, file_id)
     
     await message.answer(
         f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
@@ -233,7 +238,7 @@ async def process_payment_receipt_photo(message: Message, state: FSMContext):
 
 
 @router.message(OrderStates.waiting_payment_receipt, F.document)
-async def process_payment_receipt_document(message: Message, state: FSMContext):
+async def process_payment_receipt_document(message: Message, state: FSMContext, bot: Bot):
     """Обработка квитанции об оплате (документ)."""
     data = await state.get_data()
     order_id = data.get("order_id")
@@ -250,6 +255,10 @@ async def process_payment_receipt_document(message: Message, state: FSMContext):
         
         order.payment_receipt_file_id = file_id
         await service.update_order_status(order, OrderStatus.PAID)
+        
+        # Отправляем уведомление менеджерам
+        notification_service = NotificationService(bot)
+        await notification_service.notify_receipt_uploaded(order, file_id)
     
     await message.answer(
         f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
