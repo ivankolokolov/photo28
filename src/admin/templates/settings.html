@@ -1,55 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}Настройки{% endblock %}
+{% block title %}Настройки — Photo28 Admin{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>⚙️ Настройки</h1>
-</div>
+<h1 style="margin-bottom: 2rem;">⚙️ Настройки</h1>
 
 {% if saved %}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-    ✅ Настройки сохранены!
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<div class="card" style="background: rgba(16, 185, 129, 0.1); border-color: var(--success); margin-bottom: 1.5rem;">
+    <p style="margin: 0; color: var(--success);">✅ Настройки сохранены!</p>
 </div>
 {% endif %}
 
 <form method="POST" action="/settings">
     {% for group_key, settings_list in grouped_settings.items() %}
-    <div class="card mb-4">
+    <div class="card">
         <div class="card-header">
-            <h5 class="mb-0">{{ group_names.get(group_key, group_key) }}</h5>
+            <h2 class="card-title">{{ group_names.get(group_key, group_key) }}</h2>
         </div>
-        <div class="card-body">
+        
+        <div class="settings-list">
             {% for setting in settings_list %}
-            <div class="mb-3 row">
-                <label for="setting_{{ setting.key }}" class="col-sm-4 col-form-label">
-                    {{ setting.display_name }}
-                </label>
-                <div class="col-sm-8">
+            <div class="setting-item">
+                <div class="setting-label">
+                    <label for="setting_{{ setting.key }}">{{ setting.display_name }}</label>
+                    {% if setting.description %}
+                    <span class="setting-description">{{ setting.description }}</span>
+                    {% endif %}
+                </div>
+                <div class="setting-input">
                     {% if setting.key == 'preview_mode' %}
-                    <select class="form-select" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
+                    <select class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
                         <option value="thumbnail" {% if setting.value == 'thumbnail' %}selected{% endif %}>
-                            thumbnail — показывать как фото (медленнее)
+                            thumbnail — как фото
                         </option>
                         <option value="document" {% if setting.value == 'document' %}selected{% endif %}>
-                            document — показывать как документ (быстрее)
+                            document — как документ
                         </option>
                     </select>
                     {% elif setting.value_type.value == 'boolean' %}
-                    <select class="form-select" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
+                    <select class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}">
                         <option value="true" {% if setting.value.lower() in ['true', '1', 'yes', 'да'] %}selected{% endif %}>Да</option>
                         <option value="false" {% if setting.value.lower() not in ['true', '1', 'yes', 'да'] %}selected{% endif %}>Нет</option>
                     </select>
                     {% elif setting.value_type.value == 'text' %}
-                    <textarea class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" rows="3">{{ setting.value }}</textarea>
+                    <textarea class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" rows="3">{{ setting.value }}</textarea>
                     {% elif setting.value_type.value == 'integer' %}
-                    <input type="number" class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
+                    <input type="number" class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
                     {% else %}
-                    <input type="text" class="form-control" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
-                    {% endif %}
-                    {% if setting.description %}
-                    <div class="form-text text-muted">{{ setting.description }}</div>
+                    <input type="text" class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
                     {% endif %}
                 </div>
             </div>
@@ -58,15 +56,83 @@
     </div>
     {% endfor %}
     
-    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-        <button type="submit" class="btn btn-primary btn-lg">
+    <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
+        <button type="submit" class="btn btn-primary" style="padding: 1rem 2rem; font-size: 1rem;">
             💾 Сохранить настройки
         </button>
     </div>
 </form>
 
-<div class="alert alert-info mt-4">
-    <strong>ℹ️ Примечание:</strong> После изменения настроек может потребоваться перезапуск бота для применения некоторых изменений.
+<div class="card" style="background: rgba(99, 102, 241, 0.1); border-color: var(--accent); margin-top: 2rem;">
+    <p style="margin: 0; color: var(--text-muted); font-size: 0.875rem;">
+        <strong style="color: var(--accent);">ℹ️ Примечание:</strong> 
+        Большинство настроек применяются сразу. Для некоторых может потребоваться перезапуск бота.
+    </p>
 </div>
-{% endblock %}
 
+<style>
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.setting-item {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.setting-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.setting-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.setting-label label {
+    font-weight: 500;
+    font-size: 0.9375rem;
+    color: var(--text);
+}
+
+.setting-description {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.setting-input {
+    width: 100%;
+}
+
+.setting-input .form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+}
+
+.setting-input select.form-input {
+    cursor: pointer;
+}
+
+.setting-input textarea.form-input {
+    min-height: 100px;
+    resize: vertical;
+}
+
+@media (max-width: 768px) {
+    .setting-item {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+}
+</style>
+{% endblock %}

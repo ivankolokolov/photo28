@@ -57,6 +57,7 @@
                     <th>Описание</th>
                     <th>Статус</th>
                     <th>Создан</th>
+                    <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,10 +83,20 @@
                         {% endif %}
                     </td>
                     <td>{{ promo.created_at.strftime('%d.%m.%Y') }}</td>
+                    <td style="white-space: nowrap;">
+                        <form method="post" action="/promocodes/{{ promo.id }}/toggle" style="display: inline;">
+                            <button type="submit" class="btn btn-sm" title="{% if promo.is_active %}Отключить{% else %}Включить{% endif %}">
+                                {% if promo.is_active %}⏸{% else %}▶{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" action="/promocodes/{{ promo.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить промокод {{ promo.code }}?')">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Удалить">🗑</button>
+                        </form>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align: center; color: var(--text-muted);">
+                    <td colspan="7" style="text-align: center; color: var(--text-muted);">
                         Промокодов пока нет
                     </td>
                 </tr>

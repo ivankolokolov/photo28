@@ -356,6 +356,46 @@ async def create_promocode(
     return RedirectResponse("/promocodes", status_code=303)
 
 
+@app.post("/promocodes/{promo_id}/delete")
+async def delete_promocode(request: Request, promo_id: int):
+    """Удаление промокода."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    async with async_session() as session:
+        from sqlalchemy import select
+        from src.models.promocode import Promocode
+        
+        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        promo = result.scalar_one_or_none()
+        
+        if promo:
+            await session.delete(promo)
+            await session.commit()
+    
+    return RedirectResponse("/promocodes", status_code=303)
+
+
+@app.post("/promocodes/{promo_id}/toggle")
+async def toggle_promocode(request: Request, promo_id: int):
+    """Включение/отключение промокода."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    async with async_session() as session:
+        from sqlalchemy import select
+        from src.models.promocode import Promocode
+        
+        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        promo = result.scalar_one_or_none()
+        
+        if promo:
+            promo.is_active = not promo.is_active
+            await session.commit()
+    
+    return RedirectResponse("/promocodes", status_code=303)
+
+
 # === Настройки ===
 
 SETTING_GROUPS = {
