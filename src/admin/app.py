@@ -15,7 +15,8 @@ from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.file_service import FileService
 from src.services.yandex_disk import YandexDiskService
-from src.services.settings_service import SettingsService
+from src.services.settings_service import SettingsService, SettingKeys
+from datetime import datetime, timedelta
 from src.models.order import OrderStatus
 
 # Создаём приложение
@@ -404,6 +405,9 @@ SETTING_GROUPS = {
     "contacts": "Контакты",
 }
 
+# Группы, которые не показываем в UI настроек
+HIDDEN_SETTING_GROUPS = {"system"}
+
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, saved: str = None):
@@ -415,10 +419,12 @@ async def settings_page(request: Request, saved: str = None):
         service = SettingsService(session)
         all_settings = await service.get_all()
         
-        # Группируем настройки
+        # Группируем настройки, исключая скрытые группы
         grouped = {}
         for setting in all_settings:
             group = setting.group
+            if group in HIDDEN_SETTING_GROUPS:
+                continue
             if group not in grouped:
                 grouped[group] = []
             grouped[group].append(setting)
@@ -451,4 +457,84 @@ async def save_settings(request: Request):
                 await service.set_value(setting_key, value)
     
     return RedirectResponse("/settings?saved=1", status_code=303)
+
+
+# === Управление ботом ===
+
+@app.get("/bot-control", response_class=HTMLResponse)
+async def bot_control_page(request: Request, action: str = None):
+    """Страница управления ботом."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    # Получаем текущий статус
+    restart_requested = SettingsService.get_bool(SettingKeys.RESTART_REQUESTED, False)
+    scheduled_time_str = SettingsService.get(SettingKeys.RESTART_SCHEDULED_TIME, "")
+    
+    scheduled_time = None
+    if scheduled_time_str:
+        try:
+            scheduled_time = datetime.fromisoformat(scheduled_time_str)
+        except ValueError:
+            pass
+    
+    return templates.TemplateResponse(
+        "bot_control.html",
+        {
+            "request": request,
+            "restart_requested": restart_requested,
+            "scheduled_time": scheduled_time,
+            "action": action,
+        },
+    )
+
+
+@app.post("/bot-control/restart-now")
+async def restart_bot_now(request: Request):
+    """Запросить немедленный перезапуск бота."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    async with async_session() as session:
+        service = SettingsService(session)
+        await service.set_value(SettingKeys.RESTART_REQUESTED, "true")
+        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, "")
+    
+    return RedirectResponse("/bot-control?action=restart_requested", status_code=303)
+
+
+@app.post("/bot-control/schedule-restart")
+async def schedule_restart(request: Request, hour: int = Form(5)):
+    """Запланировать перезапуск на определённое время."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    # Вычисляем следующее время hour:00
+    now = datetime.now()
+    scheduled = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    
+    # Если это время уже прошло сегодня — планируем на завтра
+    if scheduled <= now:
+        scheduled += timedelta(days=1)
+    
+    async with async_session() as session:
+        service = SettingsService(session)
+        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, scheduled.isoformat())
+        await service.set_value(SettingKeys.RESTART_REQUESTED, "false")
+    
+    return RedirectResponse("/bot-control?action=scheduled", status_code=303)
+
+
+@app.post("/bot-control/cancel-restart")
+async def cancel_restart(request: Request):
+    """Отменить запланированный перезапуск."""
+    if not check_auth(request):
+        return RedirectResponse("/login", status_code=303)
+    
+    async with async_session() as session:
+        service = SettingsService(session)
+        await service.set_value(SettingKeys.RESTART_REQUESTED, "false")
+        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, "")
+    
+    return RedirectResponse("/bot-control?action=cancelled", status_code=303)
 

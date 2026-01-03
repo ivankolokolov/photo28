@@ -134,6 +134,10 @@ class SettingKeys:
     PAYMENT_PHONE = "payment_phone"
     PAYMENT_CARD = "payment_card"
     PAYMENT_RECEIVER = "payment_receiver"
+    
+    # Системные (не отображаются в UI настроек)
+    RESTART_REQUESTED = "restart_requested"  # "true" / "false"
+    RESTART_SCHEDULED_TIME = "restart_scheduled_time"  # ISO datetime или пустая строка
 
 
 # Значения по умолчанию
@@ -221,6 +225,25 @@ DEFAULT_SETTINGS = [
         "description": "ФИО получателя для подтверждения перевода",
         "group": "contacts",
         "sort_order": 4,
+    },
+    # Системные
+    {
+        "key": SettingKeys.RESTART_REQUESTED,
+        "value": "false",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "Перезапуск запрошен",
+        "description": "",
+        "group": "system",
+        "sort_order": 1,
+    },
+    {
+        "key": SettingKeys.RESTART_SCHEDULED_TIME,
+        "value": "",
+        "value_type": SettingType.STRING,
+        "display_name": "Запланированное время перезапуска",
+        "description": "",
+        "group": "system",
+        "sort_order": 2,
     },
 ]
 
