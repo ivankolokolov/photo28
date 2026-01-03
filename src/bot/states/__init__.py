@@ -20,11 +20,19 @@ class OrderStates(StatesGroup):
     # Выбор доставки
     selecting_delivery = State()
     
-    # Ввод данных доставки (Озон)
-    entering_ozon_delivery = State()
+    # Ввод данных доставки (ОЗОН) — пошагово
+    entering_ozon_phone = State()
+    entering_ozon_city = State()
     
-    # Ввод данных доставки (Курьер)
-    entering_courier_delivery = State()
+    # Ввод данных доставки (Курьер) — пошагово
+    entering_courier_phone = State()
+    entering_courier_address = State()
+    entering_courier_name = State()
+    entering_courier_datetime = State()
+    
+    # Ввод данных самовывоза — пошагово
+    entering_pickup_phone = State()
+    entering_pickup_name = State()
     
     # Ввод промокода
     entering_promocode = State()

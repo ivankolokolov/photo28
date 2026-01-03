@@ -319,3 +319,15 @@ def get_photo_preview_keyboard(photo_id: int, current_idx: int, total: int) -> I
     )
     
     return builder.as_markup()
+
+
+def get_back_keyboard(callback_data: str = "back") -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой Назад."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data=callback_data
+        )
+    )
+    return builder.as_markup()

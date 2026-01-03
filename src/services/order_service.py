@@ -1,9 +1,9 @@
 """Сервис управления заказами."""
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -141,6 +141,98 @@ class OrderService:
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
+    
+    async def search_orders(
+        self,
+        search: Optional[str] = None,
+        status: Optional[OrderStatus] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[List[Order], int]:
+        """Поиск и фильтрация заказов с пагинацией. Возвращает (orders, total_count)."""
+        from sqlalchemy import func, or_
+        
+        # Базовый запрос
+        base_query = select(Order).where(Order.status != OrderStatus.DRAFT)
+        count_query = select(func.count(Order.id)).where(Order.status != OrderStatus.DRAFT)
+        
+        # Фильтр по статусу
+        if status:
+            base_query = base_query.where(Order.status == status)
+            count_query = count_query.where(Order.status == status)
+        
+        # Фильтр по дате
+        if date_from:
+            base_query = base_query.where(Order.created_at >= date_from)
+            count_query = count_query.where(Order.created_at >= date_from)
+        
+        if date_to:
+            # Добавляем время до конца дня
+            date_to_end = date_to.replace(hour=23, minute=59, second=59)
+            base_query = base_query.where(Order.created_at <= date_to_end)
+            count_query = count_query.where(Order.created_at <= date_to_end)
+        
+        # Поиск по номеру заказа или username
+        if search:
+            search_term = f"%{search}%"
+            base_query = base_query.join(User, Order.user_id == User.id).where(
+                or_(
+                    Order.order_number.ilike(search_term),
+                    User.username.ilike(search_term),
+                    User.first_name.ilike(search_term),
+                )
+            )
+            count_query = count_query.join(User, Order.user_id == User.id).where(
+                or_(
+                    Order.order_number.ilike(search_term),
+                    User.username.ilike(search_term),
+                    User.first_name.ilike(search_term),
+                )
+            )
+        
+        # Получаем общее количество
+        total_result = await self.session.execute(count_query)
+        total_count = total_result.scalar() or 0
+        
+        # Получаем заказы с пагинацией
+        orders_query = (
+            base_query
+            .options(selectinload(Order.photos), selectinload(Order.user))
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        
+        result = await self.session.execute(orders_query)
+        orders = list(result.scalars().all())
+        
+        return orders, total_count
+    
+    async def delete_old_drafts(self, days: int = 7) -> int:
+        """Удаляет черновики старше указанного количества дней. Возвращает количество удалённых."""
+        from sqlalchemy import delete
+        
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # Сначала считаем
+        count_query = select(func.count(Order.id)).where(
+            Order.status == OrderStatus.DRAFT,
+            Order.created_at < cutoff_date
+        )
+        count_result = await self.session.execute(count_query)
+        count = count_result.scalar() or 0
+        
+        # Удаляем
+        delete_query = delete(Order).where(
+            Order.status == OrderStatus.DRAFT,
+            Order.created_at < cutoff_date
+        )
+        await self.session.execute(delete_query)
+        await self.session.commit()
+        
+        return count
     
     async def update_order_status(self, order: Order, status: OrderStatus) -> Order:
         """Обновляет статус заказа."""

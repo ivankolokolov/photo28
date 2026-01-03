@@ -122,26 +122,56 @@ async def dashboard(request: Request):
 async def orders_list(
     request: Request,
     status: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     page: int = Query(default=1, ge=1),
 ):
-    """Список заказов с фильтрацией."""
+    """Список заказов с фильтрацией, поиском и пагинацией."""
     if not check_auth(request):
         return RedirectResponse("/login", status_code=303)
     
     per_page = 20
     offset = (page - 1) * per_page
     
+    # Парсим даты
+    date_from_dt = None
+    date_to_dt = None
+    
+    if date_from:
+        try:
+            date_from_dt = datetime.strptime(date_from, "%Y-%m-%d")
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_dt = datetime.strptime(date_to, "%Y-%m-%d")
+        except ValueError:
+            pass
+    
+    # Парсим статус
+    status_enum = None
+    if status:
+        try:
+            status_enum = OrderStatus(status)
+        except ValueError:
+            pass
+    
     async with async_session() as session:
         service = OrderService(session)
         
-        if status:
-            try:
-                status_enum = OrderStatus(status)
-                orders = await service.get_orders_by_status(status_enum)
-            except ValueError:
-                orders = await service.get_all_orders(limit=per_page, offset=offset)
-        else:
-            orders = await service.get_all_orders(limit=per_page, offset=offset)
+        orders, total_count = await service.search_orders(
+            search=search,
+            status=status_enum,
+            date_from=date_from_dt,
+            date_to=date_to_dt,
+            limit=per_page,
+            offset=offset,
+        )
+    
+    # Пагинация
+    total_pages = (total_count + per_page - 1) // per_page
     
     return templates.TemplateResponse(
         "orders.html",
@@ -149,7 +179,12 @@ async def orders_list(
             "request": request,
             "orders": orders,
             "current_status": status,
+            "search": search or "",
+            "date_from": date_from or "",
+            "date_to": date_to or "",
             "page": page,
+            "total_pages": total_pages,
+            "total_count": total_count,
             "statuses": OrderStatus,
         },
     )
@@ -182,11 +217,27 @@ async def order_detail(request: Request, order_id: int):
 
 # === Изменение статуса ===
 
+async def send_client_notification(order, new_status: str):
+    """Отправляет уведомление клиенту о смене статуса."""
+    from aiogram import Bot
+    from src.services.notification_service import NotificationService
+    
+    try:
+        bot = Bot(token=settings.bot_token)
+        notification_service = NotificationService(bot)
+        await notification_service.notify_client_status_changed(order, new_status)
+        await bot.session.close()
+    except Exception as e:
+        import logging
+        logging.error(f"Ошибка отправки уведомления клиенту: {e}")
+
+
 @app.post("/orders/{order_id}/status")
 async def update_order_status(
     request: Request,
     order_id: int,
     status: str = Form(...),
+    notify_client: bool = Form(default=True),
 ):
     """Обновление статуса заказа."""
     if not check_auth(request):
@@ -199,9 +250,18 @@ async def update_order_status(
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
         
+        old_status = order.status.value
+        
         try:
             new_status = OrderStatus(status)
             await service.update_order_status(order, new_status)
+            
+            # Отправляем уведомление клиенту
+            if notify_client and old_status != status:
+                # Обновляем order с user для уведомления
+                order = await service.get_order_by_id(order_id)
+                await send_client_notification(order, status)
+                
         except ValueError:
             raise HTTPException(status_code=400, detail="Неверный статус")
     

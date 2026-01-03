@@ -71,6 +71,25 @@ async def check_restart_signal():
             logger.error(f"Ошибка проверки сигнала перезапуска: {e}")
 
 
+async def cleanup_old_drafts():
+    """Фоновая задача для очистки старых черновиков (раз в день)."""
+    from src.services.order_service import OrderService
+    
+    while True:
+        # Ждём до следующей проверки (каждые 6 часов)
+        await asyncio.sleep(6 * 60 * 60)
+        
+        try:
+            async with async_session() as session:
+                service = OrderService(session)
+                deleted_count = await service.delete_old_drafts(days=7)
+                
+                if deleted_count > 0:
+                    logger.info(f"🧹 Очищено {deleted_count} старых черновиков (старше 7 дней)")
+        except Exception as e:
+            logger.error(f"Ошибка очистки черновиков: {e}")
+
+
 async def main():
     """Основная функция запуска бота."""
     global _shutdown_requested
@@ -105,8 +124,9 @@ async def main():
     # Подключаем роутеры
     dp.include_router(setup_routers())
     
-    # Запускаем фоновую задачу проверки перезапуска
+    # Запускаем фоновые задачи
     restart_checker = asyncio.create_task(check_restart_signal())
+    drafts_cleaner = asyncio.create_task(cleanup_old_drafts())
     
     # Запускаем polling (без webhook — работает без публичного IP)
     logger.info("Бот запущен в режиме polling...")
@@ -123,6 +143,7 @@ async def main():
                 break
     finally:
         restart_checker.cancel()
+        drafts_cleaner.cancel()
         await bot.session.close()
         
         if _shutdown_requested:

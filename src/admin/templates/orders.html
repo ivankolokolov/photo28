@@ -2,16 +2,142 @@
 
 {% block title %}Заказы — Photo28 Admin{% endblock %}
 
-{% block content %}
-<h1 style="margin-bottom: 2rem;">📋 Заказы</h1>
+{% block extra_head %}
+<style>
+    .search-filters {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .filter-group label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    
+    .filter-group input,
+    .filter-group select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-secondary);
+        color: var(--text);
+        font-size: 0.9rem;
+    }
+    
+    .filter-group input[type="text"] {
+        min-width: 200px;
+    }
+    
+    .filter-group input[type="date"] {
+        min-width: 140px;
+    }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    .pagination a, .pagination span {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 0.9rem;
+    }
+    
+    .pagination a {
+        background: var(--bg-secondary);
+        color: var(--text);
+        border: 1px solid var(--border);
+    }
+    
+    .pagination a:hover {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+    
+    .pagination .current {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .pagination .disabled {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    
+    .results-count {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin-bottom: 1rem;
+    }
+    
+    .clear-filters {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-left: auto;
+    }
+</style>
+{% endblock %}
 
-<div class="filter-tabs">
-    <a href="/orders" class="filter-tab {% if not current_status %}active{% endif %}">Все</a>
-    <a href="/orders?status=pending_payment" class="filter-tab {% if current_status == 'pending_payment' %}active{% endif %}">⏳ Ожидают оплаты</a>
-    <a href="/orders?status=paid" class="filter-tab {% if current_status == 'paid' %}active{% endif %}">✅ Оплачены</a>
-    <a href="/orders?status=printing" class="filter-tab {% if current_status == 'printing' %}active{% endif %}">🖨 В печати</a>
-    <a href="/orders?status=ready" class="filter-tab {% if current_status == 'ready' %}active{% endif %}">📦 Готовы</a>
-    <a href="/orders?status=shipped" class="filter-tab {% if current_status == 'shipped' %}active{% endif %}">🚚 Отправлены</a>
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">📋 Заказы</h1>
+
+<!-- Поиск и фильтры -->
+<form method="get" action="/orders" class="search-filters">
+    <div class="filter-group">
+        <label>Поиск</label>
+        <input type="text" name="search" placeholder="Номер, @username..." value="{{ search }}">
+    </div>
+    
+    <div class="filter-group">
+        <label>Статус</label>
+        <select name="status">
+            <option value="">Все статусы</option>
+            <option value="pending_payment" {% if current_status == 'pending_payment' %}selected{% endif %}>⏳ Ожидает оплаты</option>
+            <option value="paid" {% if current_status == 'paid' %}selected{% endif %}>💳 Оплачен</option>
+            <option value="confirmed" {% if current_status == 'confirmed' %}selected{% endif %}>✅ Подтверждён</option>
+            <option value="printing" {% if current_status == 'printing' %}selected{% endif %}>🖨 В печати</option>
+            <option value="ready" {% if current_status == 'ready' %}selected{% endif %}>📦 Готов</option>
+            <option value="shipped" {% if current_status == 'shipped' %}selected{% endif %}>🚚 Отправлен</option>
+            <option value="delivered" {% if current_status == 'delivered' %}selected{% endif %}>✅ Доставлен</option>
+        </select>
+    </div>
+    
+    <div class="filter-group">
+        <label>С даты</label>
+        <input type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    
+    <div class="filter-group">
+        <label>По дату</label>
+        <input type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    
+    <button type="submit" class="btn btn-primary">🔍 Найти</button>
+    
+    {% if search or current_status or date_from or date_to %}
+    <a href="/orders" class="clear-filters">✕ Сбросить</a>
+    {% endif %}
+</form>
+
+<!-- Результаты -->
+<div class="results-count">
+    Найдено: <strong>{{ total_count }}</strong> заказов
+    {% if total_pages > 1 %}
+    • Страница {{ page }} из {{ total_pages }}
+    {% endif %}
 </div>
 
 <div class="card">
@@ -52,7 +178,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                         Заказов не найдено
                     </td>
                 </tr>
@@ -61,5 +187,38 @@
         </table>
     </div>
 </div>
-{% endblock %}
 
+<!-- Пагинация -->
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% set params = [] %}
+    {% if search %}{% set _ = params.append('search=' + search) %}{% endif %}
+    {% if current_status %}{% set _ = params.append('status=' + current_status) %}{% endif %}
+    {% if date_from %}{% set _ = params.append('date_from=' + date_from) %}{% endif %}
+    {% if date_to %}{% set _ = params.append('date_to=' + date_to) %}{% endif %}
+    {% set base_url = '/orders?' + params|join('&') + ('&' if params else '') %}
+    
+    {% if page > 1 %}
+    <a href="{{ base_url }}page={{ page - 1 }}">← Назад</a>
+    {% else %}
+    <span class="disabled">← Назад</span>
+    {% endif %}
+    
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="current">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
+        <a href="{{ base_url }}page={{ p }}">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 3 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+    
+    {% if page < total_pages %}
+    <a href="{{ base_url }}page={{ page + 1 }}">Вперёд →</a>
+    {% else %}
+    <span class="disabled">Вперёд →</span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
