@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        color: white;
+        text-align: center;
+    }
+    
+    .stat-card.green {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    
+    .stat-card.orange {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .stat-card.blue {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .stat-sublabel {
+        font-size: 0.75rem;
+        opacity: 0.7;
+        margin-top: 0.25rem;
+    }
+    
+    .section {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    
+    .two-columns {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+    
+    .progress-bar {
+        background: #e9ecef;
+        border-radius: 4px;
+        height: 24px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        padding-left: 8px;
+        color: white;
+        font-size: 0.8rem;
+        font-weight: 500;
+        min-width: fit-content;
+    }
+    
+    .progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 0.25rem;
+    }
+    
+    .customer-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .customer-row:last-child {
+        border-bottom: none;
+    }
+    
+    .customer-name {
+        font-weight: 500;
+    }
+    
+    .customer-stats {
+        text-align: right;
+        font-size: 0.9rem;
+    }
+    
+    .customer-spent {
+        font-weight: 600;
+        color: #28a745;
+    }
+    
+    .customer-orders {
+        color: #666;
+        font-size: 0.8rem;
+    }
+    
+    .metric-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .metric-row:last-child {
+        border-bottom: none;
+    }
+    
+    .metric-label {
+        color: #666;
+    }
+    
+    .metric-value {
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>📊 Аналитика</h1>
+
+<!-- Основные показатели -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ "{:,}".format(summary.revenue.today).replace(",", " ") }}₽</div>
+        <div class="stat-label">Сегодня</div>
+        <div class="stat-sublabel">{{ summary.revenue.today_orders }} заказов</div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-value">{{ "{:,}".format(summary.revenue.week).replace(",", " ") }}₽</div>
+        <div class="stat-label">За неделю</div>
+        <div class="stat-sublabel">{{ summary.revenue.week_orders }} заказов</div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-value">{{ "{:,}".format(summary.revenue.month).replace(",", " ") }}₽</div>
+        <div class="stat-label">За месяц</div>
+        <div class="stat-sublabel">{{ summary.revenue.month_orders }} заказов</div>
+    </div>
+    <div class="stat-card blue">
+        <div class="stat-value">{{ summary.revenue.avg_check }}₽</div>
+        <div class="stat-label">Средний чек</div>
+        <div class="stat-sublabel">за 30 дней</div>
+    </div>
+</div>
+
+<!-- График выручки -->
+<div class="section">
+    <div class="section-title">📈 Выручка за 30 дней</div>
+    <div class="chart-container">
+        <canvas id="revenueChart"></canvas>
+    </div>
+</div>
+
+<div class="two-columns">
+    <!-- Популярные форматы -->
+    <div class="section">
+        <div class="section-title">📷 Популярные форматы</div>
+        {% for item in format_stats %}
+        <div style="margin-bottom: 1rem;">
+            <div class="progress-label">
+                <span>{{ item.format_name }}</span>
+                <span>{{ item.count }} шт. ({{ item.percent }}%)</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ item.percent }}%;">
+                    {% if item.percent > 10 %}{{ item.count }}{% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p style="color: #999;">Нет данных</p>
+        {% endfor %}
+    </div>
+    
+    <!-- Способы доставки -->
+    <div class="section">
+        <div class="section-title">🚚 Способы доставки</div>
+        {% for item in delivery_stats %}
+        <div style="margin-bottom: 1rem;">
+            <div class="progress-label">
+                <span>{{ item.delivery_name }}</span>
+                <span>{{ item.count }} ({{ item.percent }}%)</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ item.percent }}%; background: linear-gradient(90deg, #11998e, #38ef7d);">
+                    {% if item.percent > 10 %}{{ item.count }}{% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p style="color: #999;">Нет данных</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="two-columns">
+    <!-- Конверсия -->
+    <div class="section">
+        <div class="section-title">📊 Конверсия</div>
+        <div class="metric-row">
+            <span class="metric-label">Всего начато заказов</span>
+            <span class="metric-value">{{ summary.conversion.total_started }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Оплачено</span>
+            <span class="metric-value" style="color: #28a745;">{{ summary.conversion.total_paid }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Незавершённые черновики</span>
+            <span class="metric-value" style="color: #ffc107;">{{ summary.conversion.total_drafts }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Отменено</span>
+            <span class="metric-value" style="color: #dc3545;">{{ summary.conversion.total_cancelled }}</span>
+        </div>
+        <div class="metric-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #eee;">
+            <span class="metric-label"><strong>Конверсия</strong></span>
+            <span class="metric-value" style="font-size: 1.2rem;">{{ summary.conversion.conversion_rate }}%</span>
+        </div>
+    </div>
+    
+    <!-- Клиенты -->
+    <div class="section">
+        <div class="section-title">👥 Клиенты</div>
+        <div class="metric-row">
+            <span class="metric-label">Всего пользователей</span>
+            <span class="metric-value">{{ customer_stats.total_users }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">С заказами</span>
+            <span class="metric-value">{{ customer_stats.users_with_orders }}</span>
+        </div>
+        <div class="metric-row">
+            <span class="metric-label">Повторные клиенты</span>
+            <span class="metric-value" style="color: #28a745;">{{ customer_stats.repeat_customers }}</span>
+        </div>
+        <div class="metric-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #eee;">
+            <span class="metric-label"><strong>% повторных</strong></span>
+            <span class="metric-value" style="font-size: 1.2rem;">{{ customer_stats.repeat_rate }}%</span>
+        </div>
+    </div>
+</div>
+
+<!-- Топ клиентов -->
+<div class="section">
+    <div class="section-title">🏆 Топ клиентов</div>
+    {% for customer in top_customers %}
+    <div class="customer-row">
+        <div class="customer-name">
+            {{ loop.index }}. 
+            {% if customer.username %}
+            <a href="https://t.me/{{ customer.username }}" target="_blank">{{ customer.name }}</a>
+            {% else %}
+            {{ customer.name }}
+            {% endif %}
+        </div>
+        <div class="customer-stats">
+            <div class="customer-spent">{{ "{:,}".format(customer.total_spent).replace(",", " ") }}₽</div>
+            <div class="customer-orders">{{ customer.orders_count }} заказов</div>
+        </div>
+    </div>
+    {% else %}
+    <p style="color: #999;">Пока нет данных о клиентах</p>
+    {% endfor %}
+</div>
+
+<script>
+// График выручки
+const ctx = document.getElementById('revenueChart').getContext('2d');
+const chartData = {{ chart_data | tojson }};
+
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        }),
+        datasets: [{
+            label: 'Выручка',
+            data: chartData.map(d => d.revenue),
+            borderColor: '#667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            fill: true,
+            tension: 0.4,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.parsed.y.toLocaleString('ru-RU') + '₽';
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return value.toLocaleString('ru-RU') + '₽';
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
+

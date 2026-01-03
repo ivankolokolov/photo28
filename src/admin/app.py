@@ -16,6 +16,7 @@ from src.services.order_service import OrderService
 from src.services.file_service import FileService
 from src.services.yandex_disk import YandexDiskService
 from src.services.settings_service import SettingsService, SettingKeys
+from src.services.analytics_service import AnalyticsService
 from datetime import datetime, timedelta
 from src.models.order import OrderStatus
 
@@ -539,4 +540,44 @@ async def cancel_restart(request: Request):
         await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, "")
     
     return RedirectResponse("/bot-control?action=cancelled", status_code=303)
+
+
+# ============== АНАЛИТИКА ==============
+
+@app.get("/analytics", response_class=HTMLResponse)
+async def analytics_page(request: Request, _: None = Depends(require_auth)):
+    """Страница аналитики."""
+    async with async_session() as session:
+        service = AnalyticsService(session)
+        
+        # Основная сводка
+        summary = await service.get_dashboard_summary()
+        
+        # Данные для графика (30 дней)
+        chart_data = await service.get_revenue_by_days(30)
+        
+        # Статистика по форматам
+        format_stats = await service.get_format_stats()
+        
+        # Статистика по доставке
+        delivery_stats = await service.get_delivery_stats()
+        
+        # Топ клиентов
+        top_customers = await service.get_top_customers(10)
+        
+        # Статистика клиентов
+        customer_stats = await service.get_customer_stats()
+    
+    return templates.TemplateResponse(
+        "analytics.html",
+        {
+            "request": request,
+            "summary": summary,
+            "chart_data": chart_data,
+            "format_stats": format_stats,
+            "delivery_stats": delivery_stats,
+            "top_customers": top_customers,
+            "customer_stats": customer_stats,
+        },
+    )
 
