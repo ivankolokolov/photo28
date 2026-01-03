@@ -399,11 +399,18 @@ async def back_to_summary(callback: CallbackQuery, state: FSMContext):
 
 def _get_photo_caption(photo, idx: int, total: int, extra_text: str = "") -> str:
     """Формирует подпись для фото при удалении."""
+    min_photos = get_min_photos()
+    
     caption = (
         f"🗑 <b>Удаление фото</b>\n\n"
         f"Фото {idx + 1} из {total}\n"
         f"Формат: {photo.format.short_name}"
     )
+    
+    # Показываем предупреждение если близко к минимуму или меньше
+    if total <= min_photos:
+        caption += f"\n\n⚠️ Минимальный заказ: {min_photos} фото"
+    
     if extra_text:
         caption += f"\n\n{extra_text}"
     return caption
@@ -614,19 +621,25 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
         
         min_photos = get_min_photos()
         if order and order.photos_count >= min_photos:
-            # Удаляем сообщение с фото
+            # Достаточно фото — переходим к сводке
             await callback.message.delete()
-            # Отправляем сводку
             await show_order_summary_new(bot, callback.from_user.id, order)
             await state.set_state(OrderStates.reviewing_order)
         elif order and order.photos_count > 0:
-            await callback.answer(
-                f"Минимальный заказ {min_photos} фото. "
-                f"Сейчас: {order.photos_count}",
-                show_alert=True,
+            # Недостаточно фото — переходим к добавлению
+            await callback.message.delete()
+            need_more = min_photos - order.photos_count
+            await bot.send_message(
+                chat_id=callback.from_user.id,
+                text=f"⚠️ Минимальный заказ: <b>{min_photos}</b> фото.\n"
+                     f"У вас: <b>{order.photos_count}</b>. Нужно ещё: <b>{need_more}</b>\n\n"
+                     f"Выберите формат для добавления:",
+                reply_markup=get_format_keyboard(),
+                parse_mode="HTML",
             )
-            return
+            await state.set_state(OrderStates.selecting_format)
         else:
+            # Все фото удалены
             await callback.message.delete()
             await bot.send_message(
                 chat_id=callback.from_user.id,

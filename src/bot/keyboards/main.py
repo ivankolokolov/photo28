@@ -313,7 +313,7 @@ def get_photo_preview_keyboard(photo_id: int, current_idx: int, total: int) -> I
     # Завершение
     builder.row(
         InlineKeyboardButton(
-            text="✅ Готово",
+            text="✅ К заказу",
             callback_data="finish_deleting"
         )
     )
