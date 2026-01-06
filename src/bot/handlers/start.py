@@ -7,14 +7,18 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.bot.states import OrderStates
 from src.bot.keyboards import get_format_keyboard
-from src.config import settings
 from src.database import async_session
 from src.services.order_service import OrderService
+from src.services.settings_service import SettingsService, SettingKeys
 from src.models.order import OrderStatus
 
 router = Router()
 
-WELCOME_MESSAGE = """Здравствуйте! 👋
+
+def get_welcome_message() -> str:
+    """Возвращает приветственное сообщение с актуальным username менеджера."""
+    manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
+    return f"""Здравствуйте! 👋
 
 Я бот приёма заказов <b>Photo28</b>!
 
@@ -85,7 +89,7 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.update_data(order_id=order.id, user_id=user.id)
     
     await message.answer(
-        WELCOME_MESSAGE.format(manager=settings.manager_username),
+        get_welcome_message(),
         reply_markup=get_format_keyboard(),
         parse_mode="HTML",
     )
@@ -134,7 +138,7 @@ async def new_order(callback: CallbackQuery, state: FSMContext):
         await state.update_data(order_id=order.id, user_id=user.id)
     
     await callback.message.edit_text(
-        WELCOME_MESSAGE.format(manager=settings.manager_username),
+        get_welcome_message(),
         reply_markup=get_format_keyboard(),
         parse_mode="HTML",
     )
@@ -197,7 +201,7 @@ async def cmd_help(message: Message):
         "2. Отправьте фотографии (минимум 10)\n"
         "3. Выберите способ доставки\n"
         "4. Оплатите и отправьте чек\n\n"
-        f"<b>Связь с менеджером:</b> @{settings.manager_username}",
+        f"<b>Связь с менеджером:</b> @{SettingsService.get(SettingKeys.MANAGER_USERNAME, 'manager')}",
         parse_mode="HTML",
     )
 

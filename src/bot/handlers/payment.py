@@ -12,8 +12,8 @@ from src.bot.keyboards import (
 from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.notification_service import NotificationService
+from src.services.settings_service import SettingsService, SettingKeys
 from src.models.order import OrderStatus
-from src.config import settings
 
 router = Router()
 
@@ -156,6 +156,11 @@ async def skip_promocode(callback: CallbackQuery, state: FSMContext):
     if order.discount > 0:
         payment_text += f"🎟 Скидка: -{order.discount}₽\n"
     
+    # Получаем данные для оплаты из настроек
+    payment_phone = SettingsService.get(SettingKeys.PAYMENT_PHONE, "")
+    payment_card = SettingsService.get(SettingKeys.PAYMENT_CARD, "")
+    payment_receiver = SettingsService.get(SettingKeys.PAYMENT_RECEIVER, "")
+    
     payment_text += f"""
 <b>💰 Итого: {order.total_cost}₽</b>
 
@@ -163,9 +168,9 @@ async def skip_promocode(callback: CallbackQuery, state: FSMContext):
 
 <b>Оплата переводом на Т-банк:</b>
 
-📱 По номеру телефона: <code>{settings.payment_phone}</code>
-💳 На карту: <code>{settings.payment_card}</code>
-👤 Получатель: {settings.payment_receiver}
+📱 По номеру телефона: <code>{payment_phone}</code>
+💳 На карту: <code>{payment_card}</code>
+👤 Получатель: {payment_receiver}
 
 ━━━━━━━━━━━━━━━
 
@@ -226,10 +231,11 @@ async def process_payment_receipt_photo(message: Message, state: FSMContext, bot
         notification_service = NotificationService(bot)
         await notification_service.notify_receipt_uploaded(order, file_id)
     
+    manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
     await message.answer(
         f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
         "Мы сообщим вам, когда фотографии будут распечатаны и готовы к отправке.\n\n"
-        f"Для связи с менеджером: @{settings.manager_username}",
+        f"Для связи с менеджером: @{manager}",
         reply_markup=get_final_keyboard(),
         parse_mode="HTML",
     )
@@ -260,10 +266,11 @@ async def process_payment_receipt_document(message: Message, state: FSMContext, 
         notification_service = NotificationService(bot)
         await notification_service.notify_receipt_uploaded(order, file_id)
     
+    manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
     await message.answer(
         f"✅ <b>Спасибо! Ваш заказ #{order.order_number} принят в работу!</b>\n\n"
         "Мы сообщим вам, когда фотографии будут распечатаны и готовы к отправке.\n\n"
-        f"Для связи с менеджером: @{settings.manager_username}",
+        f"Для связи с менеджером: @{manager}",
         reply_markup=get_final_keyboard(),
         parse_mode="HTML",
     )

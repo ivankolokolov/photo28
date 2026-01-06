@@ -12,8 +12,8 @@ from src.bot.keyboards import (
 )
 from src.database import async_session
 from src.services.order_service import OrderService
+from src.services.settings_service import SettingsService, SettingKeys
 from src.models.order import DeliveryType
-from src.config import settings
 
 router = Router()
 
@@ -424,8 +424,9 @@ async def process_pickup_name(message: Message, state: FSMContext):
 @router.callback_query(OrderStates.selecting_delivery, F.data == "delivery:manager")
 async def delivery_manager(callback: CallbackQuery, state: FSMContext):
     """Связь с менеджером."""
+    manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
     await callback.message.edit_text(
-        f"💬 Пожалуйста, напишите менеджеру: @{settings.manager_username}\n\n"
+        f"💬 Пожалуйста, напишите менеджеру: @{manager}\n\n"
         "Он поможет подобрать удобный способ доставки.",
         reply_markup=get_delivery_confirm_keyboard(),
         parse_mode="HTML",

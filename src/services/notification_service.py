@@ -185,7 +185,7 @@ class NotificationService:
             ),
             OrderStatus.CANCELLED.value: (
                 f"❌ <b>Заказ #{order.order_number} отменён</b>\n\n"
-                f"Если у вас есть вопросы, свяжитесь с менеджером: @{settings.manager_username}"
+                f"Если у вас есть вопросы, свяжитесь с менеджером: @{SettingsService.get(SettingKeys.MANAGER_USERNAME, 'manager')}"
             ),
         }
         
