@@ -8,6 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.config import settings
@@ -22,6 +23,18 @@ from src.models.order import OrderStatus
 
 # Создаём приложение
 app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None)
+
+# CORS для Mini App (GitHub Pages)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://ivankolokolov.github.io",
+        "http://localhost:3000",  # для локальной разработки
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Сессии для авторизации
 app.add_middleware(SessionMiddleware, secret_key=settings.admin_secret_key)

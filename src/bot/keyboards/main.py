@@ -336,11 +336,14 @@ def get_back_keyboard(callback_data: str = "back") -> InlineKeyboardMarkup:
 def get_crop_option_keyboard(order_id: int) -> InlineKeyboardMarkup:
     """Клавиатура с опцией кадрирования."""
     from aiogram.types import WebAppInfo
+    from src.config import settings
+    from urllib.parse import quote
     
     builder = InlineKeyboardBuilder()
     
-    # URL Mini App на GitHub Pages
-    webapp_url = f"https://ivankolokolov.github.io/photo28?order_id={order_id}"
+    # URL Mini App на GitHub Pages с параметром api_url
+    api_url = settings.admin_url or "http://localhost:8080"
+    webapp_url = f"https://ivankolokolov.github.io/photo28?order_id={order_id}&api_url={quote(api_url)}"
     
     builder.row(
         InlineKeyboardButton(

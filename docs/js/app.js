@@ -108,11 +108,8 @@ class PhotoCropperApp {
                 this.showLoading(true);
                 
                 // Определяем базовый URL API
-                // В продакшене - относительный путь (тот же домен)
-                // В разработке - localhost
-                const apiBase = window.location.hostname.includes('github.io') 
-                    ? '' // Будет прокси через nginx или настроить CORS
-                    : 'http://localhost:8080';
+            // Берём из URL параметра api_url или используем дефолт
+            const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
                 
                 const response = await fetch(`${apiBase}/api/photos/${orderId}`);
                 
