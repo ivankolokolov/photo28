@@ -7,6 +7,7 @@ from src.bot.handlers.delivery import router as delivery_router
 from src.bot.handlers.payment import router as payment_router
 from src.bot.handlers.my_orders import router as my_orders_router
 from src.bot.handlers.manager import router as manager_router
+from src.bot.handlers.crop import router as crop_router
 
 
 def setup_routers() -> Router:
@@ -19,6 +20,7 @@ def setup_routers() -> Router:
     main_router.include_router(payment_router)
     main_router.include_router(my_orders_router)
     main_router.include_router(manager_router)
+    main_router.include_router(crop_router)
     
     return main_router
 

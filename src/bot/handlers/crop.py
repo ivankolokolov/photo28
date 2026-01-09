@@ -1,0 +1,148 @@
+"""Обработка кадрирования фото через Mini App."""
+import json
+import logging
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, WebAppInfo
+from aiogram.fsm.context import FSMContext
+
+from src.database import async_session
+from src.services.order_service import OrderService
+from src.bot.states import OrderStates
+from src.bot.keyboards import get_main_menu_keyboard
+from src.config import settings
+
+router = Router()
+logger = logging.getLogger(__name__)
+
+# URL Mini App на GitHub Pages
+# После деплоя заменить на реальный URL
+WEBAPP_URL = "https://ivankolokolov.github.io/photo28/webapp"
+
+
+def get_crop_webapp_keyboard(order_id: int):
+    """Клавиатура с кнопкой открытия Mini App."""
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    # Формируем URL с параметрами
+    webapp_url = f"{WEBAPP_URL}?order_id={order_id}"
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✂️ Настроить кадрирование",
+            web_app=WebAppInfo(url=webapp_url)
+        )],
+        [InlineKeyboardButton(
+            text="⏭ Пропустить (авто-кадр)",
+            callback_data="skip_crop"
+        )],
+    ])
+
+
+@router.message(F.web_app_data)
+async def handle_webapp_data(message: Message, state: FSMContext):
+    """Обработка данных из Mini App."""
+    try:
+        data = json.loads(message.web_app_data.data)
+        logger.info(f"Received crop data from Mini App: {data}")
+        
+        photos = data.get("photos", [])
+        
+        if not photos:
+            await message.answer("⚠️ Не получены данные кадрирования")
+            return
+        
+        async with async_session() as session:
+            service = OrderService(session)
+            
+            # Сохраняем данные кропа для каждого фото
+            saved_count = 0
+            for photo_data in photos:
+                photo_id = photo_data.get("id")
+                crop = photo_data.get("crop")
+                
+                if photo_id and crop:
+                    await service.update_photo_crop(
+                        photo_id=photo_id,
+                        crop_data=json.dumps(crop),
+                        crop_confirmed=True
+                    )
+                    saved_count += 1
+        
+        await message.answer(
+            f"✅ Кадрирование сохранено!\n"
+            f"Обработано фото: {saved_count} шт.\n\n"
+            f"Теперь выберите способ доставки:",
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Переходим к выбору доставки
+        await state.set_state(OrderStates.selecting_delivery)
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse webapp data: {e}")
+        await message.answer("❌ Ошибка обработки данных. Попробуйте ещё раз.")
+    except Exception as e:
+        logger.error(f"Error handling webapp data: {e}")
+        await message.answer("❌ Произошла ошибка. Попробуйте ещё раз.")
+
+
+@router.callback_query(F.data == "skip_crop")
+async def skip_crop(callback: CallbackQuery, state: FSMContext):
+    """Пропустить ручное кадрирование, использовать авто-кадр."""
+    await callback.answer()
+    
+    await callback.message.edit_text(
+        "⏭ Будет использовано автоматическое кадрирование.\n\n"
+        "Выберите способ доставки:",
+    )
+    
+    # Переходим к выбору доставки
+    await state.set_state(OrderStates.selecting_delivery)
+
+
+@router.callback_query(F.data == "open_crop_editor")
+async def open_crop_editor(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Открыть редактор кадрирования."""
+    await callback.answer()
+    
+    # Получаем текущий заказ
+    data = await state.get_data()
+    order_id = data.get("order_id")
+    
+    if not order_id:
+        await callback.message.answer("❌ Заказ не найден. Начните сначала: /start")
+        return
+    
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        
+        if not order or not order.photos:
+            await callback.message.answer("❌ Фото не найдены.")
+            return
+        
+        photos_count = len(order.photos)
+    
+    await callback.message.edit_text(
+        f"✂️ *Кадрирование фото*\n\n"
+        f"У вас {photos_count} фото.\n"
+        f"Нажмите кнопку ниже, чтобы открыть редактор кадрирования.\n\n"
+        f"💡 Вы можете настроить область печати для каждого фото или пропустить этот шаг.",
+        parse_mode="Markdown",
+        reply_markup=get_crop_webapp_keyboard(order_id)
+    )
+
+
+async def suggest_crop_after_photos(message: Message, state: FSMContext, order_id: int, photos_count: int):
+    """Предложить кадрирование после загрузки всех фото."""
+    
+    # Проверяем нужно ли предлагать кадрирование
+    # (можно вынести в настройки админки)
+    
+    await message.answer(
+        f"📷 Отлично! Загружено {photos_count} фото.\n\n"
+        f"✂️ Хотите настроить кадрирование?\n"
+        f"Это позволит выбрать, какая часть фото попадёт в печать.\n\n"
+        f"💡 Если пропустить — будет использовано авто-кадрирование по центру.",
+        reply_markup=get_crop_webapp_keyboard(order_id)
+    )

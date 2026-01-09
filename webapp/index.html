@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Кадрирование фото — Print28</title>
+    
+    <!-- Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <!-- Cropper.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
+    <!-- App styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <span class="header-icon">✂️</span>
+                <span>Кадрирование</span>
+            </div>
+            <div class="header-counter">
+                <span id="currentIndex">1</span>/<span id="totalPhotos">1</span>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <main class="main">
+            <!-- Photo container -->
+            <div class="photo-container">
+                <div class="cropper-wrapper" id="cropperWrapper">
+                    <img id="cropImage" src="" alt="Фото для кадрирования">
+                </div>
+                
+                <!-- Loading state -->
+                <div class="loading" id="loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Загрузка фото...</div>
+                </div>
+
+                <!-- Error state -->
+                <div class="error-state" id="errorState" style="display: none;">
+                    <div class="error-icon">😕</div>
+                    <div class="error-text">Не удалось загрузить фото</div>
+                    <button class="btn btn-secondary" onclick="app.retryLoad()">Попробовать снова</button>
+                </div>
+            </div>
+
+            <!-- Photo info -->
+            <div class="photo-info">
+                <div class="format-badge" id="formatBadge">Полароид</div>
+                <div class="confidence-indicator" id="confidenceIndicator">
+                    <span class="confidence-dot"></span>
+                    <span class="confidence-text">Автокадр</span>
+                </div>
+            </div>
+
+            <!-- Hint -->
+            <div class="hint" id="hint">
+                <span class="hint-icon">💡</span>
+                <span>Перетащите область или измените размер</span>
+            </div>
+        </main>
+
+        <!-- Controls -->
+        <footer class="controls">
+            <!-- Quick actions -->
+            <div class="quick-actions">
+                <button class="action-btn" id="btnReset" title="Сбросить">
+                    <span class="action-icon">↩️</span>
+                    <span class="action-label">Сброс</span>
+                </button>
+                <button class="action-btn" id="btnAutoCrop" title="Автокадр">
+                    <span class="action-icon">🎯</span>
+                    <span class="action-label">Авто</span>
+                </button>
+                <button class="action-btn" id="btnRotate" title="Повернуть">
+                    <span class="action-icon">🔄</span>
+                    <span class="action-label">Поворот</span>
+                </button>
+                <button class="action-btn" id="btnFlip" title="Отразить">
+                    <span class="action-icon">↔️</span>
+                    <span class="action-label">Отразить</span>
+                </button>
+            </div>
+
+            <!-- Navigation -->
+            <div class="navigation">
+                <button class="nav-btn" id="btnPrev" disabled>
+                    <span>◀️</span>
+                    <span>Пред</span>
+                </button>
+                
+                <div class="nav-dots" id="navDots">
+                    <!-- Dots will be generated dynamically -->
+                </div>
+                
+                <button class="nav-btn" id="btnNext">
+                    <span>След</span>
+                    <span>▶️</span>
+                </button>
+            </div>
+
+            <!-- Save button -->
+            <button class="btn-save" id="btnSave">
+                <span class="save-icon">✅</span>
+                <span class="save-text">Сохранить всё</span>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast">
+        <span class="toast-icon"></span>
+        <span class="toast-text"></span>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

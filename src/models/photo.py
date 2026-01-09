@@ -69,6 +69,12 @@ class Photo(Base):
     # File ID миниатюры для быстрого превью
     thumbnail_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
+    # Данные кадрирования (JSON: {x, y, width, height, rotate, scaleX, scaleY})
+    crop_data: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    
+    # Флаг: кроп подтверждён пользователем
+    crop_confirmed: Mapped[bool] = mapped_column(default=False)
+    
     # Relationships
     order: Mapped["Order"] = relationship(back_populates="photos")
     

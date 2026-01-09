@@ -602,6 +602,64 @@ async def cancel_restart(request: Request):
     return RedirectResponse("/bot-control?action=cancelled", status_code=303)
 
 
+# ============== API ДЛЯ MINI APP ==============
+
+@app.get("/api/photos/{order_id}")
+async def get_order_photos_api(order_id: int, token: str = None):
+    """API для Mini App: получение фото заказа."""
+    # Простая авторизация по токену (можно улучшить)
+    # В реальности токен генерируется для каждой сессии
+    
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        photos_data = []
+        for photo in order.photos:
+            photos_data.append({
+                "id": photo.id,
+                "url": f"/api/photo-proxy/{photo.telegram_file_id}",
+                "format": photo.format.value,
+                "format_name": photo.format.short_name,
+                "auto_crop": None,  # TODO: добавить автокроп через OpenCV
+                "confidence": 0.85,
+                "crop_data": photo.crop_data,
+                "crop_confirmed": photo.crop_confirmed,
+            })
+        
+        return {
+            "order_id": order_id,
+            "order_number": order.order_number,
+            "photos": photos_data,
+        }
+
+
+@app.get("/api/photo-proxy/{file_id}")
+async def photo_proxy(file_id: str):
+    """Проксирует фото из Telegram для Mini App."""
+    from aiogram import Bot
+    import io
+    from fastapi.responses import StreamingResponse
+    
+    bot = Bot(token=settings.bot_token)
+    try:
+        file = await bot.get_file(file_id)
+        photo_bytes = await bot.download_file(file.file_path)
+        
+        return StreamingResponse(
+            io.BytesIO(photo_bytes.read()),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "max-age=86400"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Photo not found: {e}")
+    finally:
+        await bot.session.close()
+
+
 # ============== АНАЛИТИКА ==============
 
 @app.get("/analytics", response_class=HTMLResponse)

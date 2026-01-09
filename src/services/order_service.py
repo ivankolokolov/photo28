@@ -329,6 +329,30 @@ class OrderService:
         result = await self.session.execute(query)
         return list(result.scalars().all())
     
+    async def get_photo_by_id(self, photo_id: int) -> Optional[Photo]:
+        """Получает фото по ID."""
+        query = select(Photo).where(Photo.id == photo_id)
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+    
+    async def update_photo_crop(
+        self,
+        photo_id: int,
+        crop_data: str,
+        crop_confirmed: bool = True,
+    ) -> Optional[Photo]:
+        """Обновляет данные кадрирования фото."""
+        photo = await self.get_photo_by_id(photo_id)
+        if not photo:
+            return None
+        
+        photo.crop_data = crop_data
+        photo.crop_confirmed = crop_confirmed
+        
+        await self.session.commit()
+        await self.session.refresh(photo)
+        return photo
+    
     # === Работа с промокодами ===
     
     async def get_promocode(self, code: str) -> Optional[Promocode]:

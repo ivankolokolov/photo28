@@ -331,3 +331,42 @@ def get_back_keyboard(callback_data: str = "back") -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
+
+
+def get_crop_option_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура с опцией кадрирования."""
+    from aiogram.types import WebAppInfo
+    
+    builder = InlineKeyboardBuilder()
+    
+    # URL Mini App (обновить после деплоя на GitHub Pages)
+    webapp_url = f"https://ivankolokolov.github.io/photo28/webapp?order_id={order_id}"
+    
+    builder.row(
+        InlineKeyboardButton(
+            text="✂️ Настроить кадрирование",
+            web_app=WebAppInfo(url=webapp_url)
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⏭ Авто-кадр (пропустить)",
+            callback_data="skip_crop"
+        )
+    )
+    
+    return builder.as_markup()
+
+
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Основное меню после операций."""
+    builder = InlineKeyboardBuilder()
+    
+    builder.row(
+        InlineKeyboardButton(
+            text="🚚 Выбрать доставку",
+            callback_data="select_delivery"
+        )
+    )
+    
+    return builder.as_markup()
