@@ -15,8 +15,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 # URL Mini App на GitHub Pages
-# После деплоя заменить на реальный URL
-WEBAPP_URL = "https://ivankolokolov.github.io/photo28/webapp"
+WEBAPP_URL = "https://ivankolokolov.github.io/photo28"
 
 
 def get_crop_webapp_keyboard(order_id: int):

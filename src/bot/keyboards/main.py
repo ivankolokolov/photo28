@@ -339,8 +339,8 @@ def get_crop_option_keyboard(order_id: int) -> InlineKeyboardMarkup:
     
     builder = InlineKeyboardBuilder()
     
-    # URL Mini App (обновить после деплоя на GitHub Pages)
-    webapp_url = f"https://ivankolokolov.github.io/photo28/webapp?order_id={order_id}"
+    # URL Mini App на GitHub Pages
+    webapp_url = f"https://ivankolokolov.github.io/photo28?order_id={order_id}"
     
     builder.row(
         InlineKeyboardButton(
