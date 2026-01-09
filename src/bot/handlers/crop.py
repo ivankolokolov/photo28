@@ -21,9 +21,11 @@ WEBAPP_URL = "https://ivankolokolov.github.io/photo28"
 def get_crop_webapp_keyboard(order_id: int):
     """Клавиатура с кнопкой открытия Mini App."""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from urllib.parse import quote
     
     # Формируем URL с параметрами
-    webapp_url = f"{WEBAPP_URL}?order_id={order_id}"
+    api_url = settings.admin_url or "http://localhost:8080"
+    webapp_url = f"{WEBAPP_URL}?order_id={order_id}&api_url={quote(api_url)}"
     
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
