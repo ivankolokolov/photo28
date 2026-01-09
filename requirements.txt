@@ -23,6 +23,9 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 Pillow==10.2.0
 
+# Smart Crop (Face Detection)
+opencv-python-headless==4.9.0.80  # headless версия без GUI
+
 # For production
 gunicorn==21.2.0
 

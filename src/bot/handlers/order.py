@@ -1,6 +1,7 @@
 """Обработчики заказа и фотографий."""
 import asyncio
-from typing import Dict
+import logging
+from typing import Dict, List
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -11,12 +12,15 @@ from src.bot.keyboards import (
     get_photo_actions_keyboard,
     get_order_summary_keyboard,
     get_photo_preview_keyboard,
+    get_crop_option_keyboard,
 )
 from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.pricing import PricingService
 from src.services.settings_service import SettingsService, SettingKeys
-from src.models.photo import PhotoFormat
+from src.models.photo import PhotoFormat, Photo
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -37,6 +41,72 @@ https://dariakis28.ru/kadrirovanie-fotografiy
 def get_min_photos() -> int:
     """Получает минимальное количество фото из настроек."""
     return SettingsService.get_int(SettingKeys.MIN_PHOTOS, 10)
+
+
+async def analyze_photos_for_crop(
+    bot: Bot,
+    photos: List[Photo],
+    session,
+) -> tuple[int, int, int]:
+    """
+    Анализирует фото для умного кропа.
+    
+    Returns:
+        (total, auto_approved, needs_review) — количества фото
+    """
+    from src.services.smart_crop_service import get_smart_crop_service, SmartCropService
+    
+    if not SettingsService.get_bool(SettingKeys.SMART_CROP_ENABLED, True):
+        return len(photos), 0, 0
+    
+    if not SmartCropService.is_available():
+        logger.warning("SmartCropService недоступен (OpenCV не установлен)")
+        return len(photos), 0, 0
+    
+    face_priority = SettingsService.get_int(SettingKeys.CROP_FACE_PRIORITY, 80)
+    confidence_threshold = SettingsService.get_int(SettingKeys.CROP_CONFIDENCE_THRESHOLD, 85) / 100.0
+    
+    crop_service = get_smart_crop_service(face_priority)
+    
+    auto_approved = 0
+    needs_review = 0
+    
+    for photo in photos:
+        # Пропускаем уже проанализированные
+        if photo.auto_crop_data:
+            if photo.crop_confidence and photo.crop_confidence >= confidence_threshold:
+                auto_approved += 1
+            else:
+                needs_review += 1
+            continue
+        
+        try:
+            # Скачиваем фото
+            file = await bot.get_file(photo.telegram_file_id)
+            photo_bytes = await bot.download_file(file.file_path)
+            image_data = photo_bytes.read()
+            
+            # Анализируем
+            result = crop_service.analyze_photo(image_data, photo.format.value)
+            
+            # Сохраняем результат
+            photo.auto_crop_data = result.to_json()
+            photo.crop_confidence = result.confidence
+            photo.crop_method = result.method
+            photo.faces_found = result.faces_found
+            
+            if result.confidence >= confidence_threshold:
+                auto_approved += 1
+            else:
+                needs_review += 1
+                
+        except Exception as e:
+            logger.error(f"Ошибка анализа фото {photo.id}: {e}")
+            needs_review += 1
+    
+    await session.commit()
+    
+    return len(photos), auto_approved, needs_review
 
 
 @router.callback_query(F.data.startswith("format:"))
@@ -289,7 +359,7 @@ async def add_another_format(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "finish_photos")
-async def finish_photos(callback: CallbackQuery, state: FSMContext):
+async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Завершение отбора фото."""
     data = await state.get_data()
     order_id = data.get("order_id")
@@ -311,7 +381,58 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext):
             )
             return
         
-        # Показываем сводку заказа
+        # Проверяем настройки кропа
+        crop_enabled = SettingsService.get_bool(SettingKeys.CROP_ENABLED, True)
+        smart_crop_enabled = SettingsService.get_bool(SettingKeys.SMART_CROP_ENABLED, True)
+        crop_show_mode = SettingsService.get(SettingKeys.CROP_SHOW_EDITOR, "problems_only")
+        
+        if crop_enabled and smart_crop_enabled:
+            # Показываем что анализируем
+            await callback.message.edit_text(
+                f"🔍 Анализирую {order.photos_count} фото...\n"
+                "Определяю лица и важные области для кадрирования."
+            )
+            
+            # Анализируем фото
+            total, auto_approved, needs_review = await analyze_photos_for_crop(
+                bot, order.photos, session
+            )
+            
+            # Решаем показывать ли редактор
+            show_editor = False
+            if crop_show_mode == "always":
+                show_editor = True
+            elif crop_show_mode == "problems_only" and needs_review > 0:
+                show_editor = True
+            # "never" — не показываем
+            
+            if show_editor:
+                # Предлагаем редактор кропа
+                if needs_review > 0:
+                    text = (
+                        f"✅ Анализ завершён!\n\n"
+                        f"📊 Результат:\n"
+                        f"• Готовы к печати: {auto_approved} фото\n"
+                        f"• Требуют внимания: {needs_review} фото\n\n"
+                        f"Рекомендуем проверить кадрирование для фото, "
+                        f"где были найдены несколько лиц или лица у края кадра."
+                    )
+                else:
+                    text = (
+                        f"✅ Все {total} фото готовы к печати!\n\n"
+                        f"Авто-кадрирование определило оптимальные области.\n"
+                        f"Вы можете проверить и скорректировать при желании."
+                    )
+                
+                await callback.message.edit_text(
+                    text,
+                    reply_markup=get_crop_option_keyboard(order_id)
+                )
+                await state.set_state(OrderStates.editing_crop)
+                await callback.answer()
+                return
+        
+        # Если кроп отключён или не нужен редактор — сразу к сводке
         await show_order_summary(callback.message, order, edit=True)
     
     await state.set_state(OrderStates.reviewing_order)

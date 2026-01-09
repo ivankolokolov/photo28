@@ -124,6 +124,13 @@ class SettingKeys:
     MIN_PHOTOS = "min_photos"
     PREVIEW_MODE = "preview_mode"  # "thumbnail" или "document"
     
+    # Кадрирование
+    CROP_ENABLED = "crop_enabled"  # Включить функцию кадрирования
+    SMART_CROP_ENABLED = "smart_crop_enabled"  # Использовать умный авто-кроп
+    CROP_FACE_PRIORITY = "crop_face_priority"  # Приоритет лиц при кропе (0-100)
+    CROP_CONFIDENCE_THRESHOLD = "crop_confidence_threshold"  # Порог уверенности для авто-подтверждения
+    CROP_SHOW_EDITOR = "crop_show_editor"  # Всегда показывать редактор или только проблемные
+    
     # Доставка
     DELIVERY_PRICE_CDEK = "delivery_price_cdek"
     DELIVERY_PRICE_POST = "delivery_price_post"
@@ -137,6 +144,7 @@ class SettingKeys:
     
     # Уведомления
     MANAGER_CHAT_ID = "manager_chat_id"  # ID группы менеджеров для уведомлений
+    NOTIFY_CLIENT_STATUS = "notify_client_status"  # Уведомлять клиента о смене статуса
     
     # Системные (не отображаются в UI настроек)
     RESTART_REQUESTED = "restart_requested"  # "true" / "false"
@@ -160,9 +168,55 @@ DEFAULT_SETTINGS = [
         "value": "thumbnail",
         "value_type": SettingType.STRING,
         "display_name": "Режим превью документов",
-        "description": "thumbnail — показывать как фото (медленнее), document — показывать как документ",
+        "description": "thumbnail — показывать как фото, document — показывать как документ",
         "group": "general",
         "sort_order": 2,
+    },
+    # Кадрирование
+    {
+        "key": SettingKeys.CROP_ENABLED,
+        "value": "true",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "Включить кадрирование",
+        "description": "Предлагать клиентам настроить кадрирование фото перед печатью",
+        "group": "crop",
+        "sort_order": 1,
+    },
+    {
+        "key": SettingKeys.SMART_CROP_ENABLED,
+        "value": "true",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "Умный авто-кроп",
+        "description": "Автоматически определять лица и важные области для кадрирования",
+        "group": "crop",
+        "sort_order": 2,
+    },
+    {
+        "key": SettingKeys.CROP_FACE_PRIORITY,
+        "value": "80",
+        "value_type": SettingType.INTEGER,
+        "display_name": "Приоритет лиц (0-100)",
+        "description": "Насколько важно центрировать кроп на лицах. 100 = всегда по лицу, 0 = игнорировать лица",
+        "group": "crop",
+        "sort_order": 3,
+    },
+    {
+        "key": SettingKeys.CROP_CONFIDENCE_THRESHOLD,
+        "value": "85",
+        "value_type": SettingType.INTEGER,
+        "display_name": "Порог авто-подтверждения (%)",
+        "description": "Если уверенность кропа выше этого порога — не спрашивать подтверждение у клиента",
+        "group": "crop",
+        "sort_order": 4,
+    },
+    {
+        "key": SettingKeys.CROP_SHOW_EDITOR,
+        "value": "problems_only",
+        "value_type": SettingType.STRING,
+        "display_name": "Показывать редактор кропа",
+        "description": "always — всегда, problems_only — только для проблемных фото, never — никогда",
+        "group": "crop",
+        "sort_order": 5,
     },
     # Доставка
     {

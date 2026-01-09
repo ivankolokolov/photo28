@@ -17,6 +17,9 @@ class OrderStates(StatesGroup):
     # Удаление фото
     deleting_photos = State()
     
+    # Редактирование кропа
+    editing_crop = State()
+    
     # Выбор доставки
     selecting_delivery = State()
     

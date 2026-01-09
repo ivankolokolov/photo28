@@ -97,31 +97,57 @@ class PhotoCropperApp {
         });
     }
     
-    loadPhotosData() {
-        // Try to get data from Telegram
-        if (this.tg?.initDataUnsafe?.start_param) {
-            // Data passed via start parameter
-            try {
-                const data = JSON.parse(atob(this.tg.initDataUnsafe.start_param));
-                this.photos = data.photos || [];
-            } catch (e) {
-                console.error('Failed to parse start_param:', e);
-            }
-        }
-        
-        // Try URL params as fallback (for testing)
+    async loadPhotosData() {
+        // Try URL params for order_id
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('photos')) {
-            try {
-                this.photos = JSON.parse(decodeURIComponent(urlParams.get('photos')));
-            } catch (e) {
-                console.error('Failed to parse URL photos:', e);
-            }
-        }
+        const orderId = urlParams.get('order_id');
         
-        // Demo mode if no data
-        if (this.photos.length === 0) {
-            this.photos = this.getDemoPhotos();
+        if (orderId) {
+            // Load from API
+            try {
+                this.showLoading(true);
+                
+                // Определяем базовый URL API
+                // В продакшене - относительный путь (тот же домен)
+                // В разработке - localhost
+                const apiBase = window.location.hostname.includes('github.io') 
+                    ? '' // Будет прокси через nginx или настроить CORS
+                    : 'http://localhost:8080';
+                
+                const response = await fetch(`${apiBase}/api/photos/${orderId}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    this.photos = data.photos.map(p => ({
+                        ...p,
+                        // Преобразуем URL если нужно
+                        url: p.url.startsWith('http') ? p.url : `${apiBase}${p.url}`
+                    }));
+                    this.orderId = data.order_id;
+                    this.orderNumber = data.order_number;
+                } else {
+                    console.error('API error:', response.status);
+                    this.photos = this.getDemoPhotos();
+                }
+            } catch (e) {
+                console.error('Failed to load from API:', e);
+                this.photos = this.getDemoPhotos();
+            }
+        } else {
+            // Try to get data from Telegram
+            if (this.tg?.initDataUnsafe?.start_param) {
+                try {
+                    const data = JSON.parse(atob(this.tg.initDataUnsafe.start_param));
+                    this.photos = data.photos || [];
+                } catch (e) {
+                    console.error('Failed to parse start_param:', e);
+                }
+            }
+            
+            // Demo mode if no data
+            if (this.photos.length === 0) {
+                this.photos = this.getDemoPhotos();
+            }
         }
         
         // Initialize UI
@@ -208,7 +234,7 @@ class PhotoCropperApp {
         // Update UI
         this.elements.currentIndex.textContent = index + 1;
         this.elements.formatBadge.textContent = photo.format_name || 'Полароид';
-        this.updateConfidenceIndicator(photo.confidence);
+        this.updateConfidenceIndicator(photo);
         this.updateNavigation();
         this.updateNavDots();
         
@@ -266,20 +292,41 @@ class PhotoCropperApp {
         });
     }
     
-    updateConfidenceIndicator(confidence) {
+    updateConfidenceIndicator(photo) {
         const dot = this.elements.confidenceIndicator.querySelector('.confidence-dot');
         const text = this.elements.confidenceIndicator.querySelector('.confidence-text');
+        const confidence = photo.confidence || 0.5;
+        const method = photo.method || 'center';
+        const facesFound = photo.faces_found || 0;
         
         dot.classList.remove('medium', 'low');
         
-        if (confidence >= 0.8) {
-            text.textContent = 'Отличный кадр';
-        } else if (confidence >= 0.5) {
+        // Определяем текст в зависимости от метода и уверенности
+        if (method === 'face') {
+            if (facesFound === 1) {
+                text.textContent = '👤 Лицо найдено';
+            } else if (facesFound > 1) {
+                dot.classList.add('medium');
+                text.textContent = `👥 Найдено ${facesFound} лица`;
+            }
+        } else if (method === 'saliency') {
             dot.classList.add('medium');
-            text.textContent = 'Можно улучшить';
+            text.textContent = '🎯 Авто-фокус';
         } else {
+            // center
+            if (confidence >= 0.8) {
+                text.textContent = 'По центру';
+            } else {
+                dot.classList.add('low');
+                text.textContent = 'Проверьте кадр';
+            }
+        }
+        
+        // Цвет точки по уверенности
+        if (confidence < 0.5) {
             dot.classList.add('low');
-            text.textContent = 'Требует внимания';
+        } else if (confidence < 0.8) {
+            dot.classList.add('medium');
         }
     }
     

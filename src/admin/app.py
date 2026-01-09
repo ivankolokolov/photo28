@@ -463,6 +463,7 @@ async def toggle_promocode(request: Request, promo_id: int):
 
 SETTING_GROUPS = {
     "general": "Основные",
+    "crop": "Кадрирование",
     "delivery": "Доставка",
     "contacts": "Контакты",
     "notifications": "Уведомления",
@@ -606,9 +607,8 @@ async def cancel_restart(request: Request):
 
 @app.get("/api/photos/{order_id}")
 async def get_order_photos_api(order_id: int, token: str = None):
-    """API для Mini App: получение фото заказа."""
-    # Простая авторизация по токену (можно улучшить)
-    # В реальности токен генерируется для каждой сессии
+    """API для Mini App: получение фото заказа с данными авто-кропа."""
+    import json
     
     async with async_session() as session:
         service = OrderService(session)
@@ -619,13 +619,23 @@ async def get_order_photos_api(order_id: int, token: str = None):
         
         photos_data = []
         for photo in order.photos:
+            # Парсим auto_crop_data если есть
+            auto_crop = None
+            if photo.auto_crop_data:
+                try:
+                    auto_crop = json.loads(photo.auto_crop_data)
+                except json.JSONDecodeError:
+                    pass
+            
             photos_data.append({
                 "id": photo.id,
                 "url": f"/api/photo-proxy/{photo.telegram_file_id}",
                 "format": photo.format.value,
                 "format_name": photo.format.short_name,
-                "auto_crop": None,  # TODO: добавить автокроп через OpenCV
-                "confidence": 0.85,
+                "auto_crop": auto_crop,
+                "confidence": photo.crop_confidence or 0.5,
+                "method": photo.crop_method or "center",
+                "faces_found": photo.faces_found or 0,
                 "crop_data": photo.crop_data,
                 "crop_confirmed": photo.crop_confirmed,
             })

@@ -1,7 +1,7 @@
 """Модель фотографии."""
 from enum import Enum
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Enum as SQLEnum
+from sqlalchemy import String, Integer, Float, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -69,7 +69,19 @@ class Photo(Base):
     # File ID миниатюры для быстрого превью
     thumbnail_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
-    # Данные кадрирования (JSON: {x, y, width, height, rotate, scaleX, scaleY})
+    # Автоматически определённый кроп (JSON от SmartCropService)
+    auto_crop_data: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    
+    # Уверенность авто-кропа (0-1)
+    crop_confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    
+    # Метод авто-кропа: "face", "saliency", "center"
+    crop_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    
+    # Количество найденных лиц
+    faces_found: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Финальные данные кадрирования (JSON, после редактирования пользователем)
     crop_data: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     
     # Флаг: кроп подтверждён пользователем

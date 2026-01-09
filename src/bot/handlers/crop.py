@@ -90,13 +90,19 @@ async def skip_crop(callback: CallbackQuery, state: FSMContext):
     """Пропустить ручное кадрирование, использовать авто-кадр."""
     await callback.answer()
     
-    await callback.message.edit_text(
-        "⏭ Будет использовано автоматическое кадрирование.\n\n"
-        "Выберите способ доставки:",
-    )
+    data = await state.get_data()
+    order_id = data.get("order_id")
     
-    # Переходим к выбору доставки
-    await state.set_state(OrderStates.selecting_delivery)
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        
+        if order:
+            # Показываем сводку заказа
+            from src.bot.handlers.order import show_order_summary
+            await show_order_summary(callback.message, order, edit=True)
+    
+    await state.set_state(OrderStates.reviewing_order)
 
 
 @router.callback_query(F.data == "open_crop_editor")

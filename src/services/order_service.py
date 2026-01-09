@@ -285,6 +285,10 @@ class OrderService:
         local_path: Optional[str] = None,
         is_document: bool = False,
         thumbnail_file_id: Optional[str] = None,
+        auto_crop_data: Optional[str] = None,
+        crop_confidence: Optional[float] = None,
+        crop_method: Optional[str] = None,
+        faces_found: int = 0,
     ) -> Photo:
         """Добавляет фотографию в заказ."""
         # Определяем позицию
@@ -298,6 +302,10 @@ class OrderService:
             position=position,
             is_document=is_document,
             thumbnail_file_id=thumbnail_file_id,
+            auto_crop_data=auto_crop_data,
+            crop_confidence=crop_confidence,
+            crop_method=crop_method,
+            faces_found=faces_found,
         )
         self.session.add(photo)
         await self.session.commit()
