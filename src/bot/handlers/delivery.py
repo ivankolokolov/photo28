@@ -98,6 +98,10 @@ async def delivery_ozon_start(callback: CallbackQuery, state: FSMContext):
 @router.message(OrderStates.entering_ozon_phone)
 async def process_ozon_phone(message: Message, state: FSMContext):
     """Обработка телефона для ОЗОН."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите номер телефона текстом.")
+        return
+    
     is_valid, phone = validate_phone(message.text)
     
     if not is_valid:
@@ -127,6 +131,10 @@ async def process_ozon_phone(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_ozon_city)
 async def process_ozon_city(message: Message, state: FSMContext):
     """Обработка города для ОЗОН."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите город текстом.")
+        return
+    
     city = message.text.strip()
     
     if len(city) < 2:
@@ -193,6 +201,10 @@ async def delivery_courier_start(callback: CallbackQuery, state: FSMContext):
 @router.message(OrderStates.entering_courier_phone)
 async def process_courier_phone(message: Message, state: FSMContext):
     """Обработка телефона для курьера."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите номер телефона текстом.")
+        return
+    
     is_valid, phone = validate_phone(message.text)
     
     if not is_valid:
@@ -222,6 +234,10 @@ async def process_courier_phone(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_courier_address)
 async def process_courier_address(message: Message, state: FSMContext):
     """Обработка адреса для курьера."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите адрес текстом.")
+        return
+    
     address = message.text.strip()
     
     if len(address) < 10:
@@ -247,6 +263,10 @@ async def process_courier_address(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_courier_name)
 async def process_courier_name(message: Message, state: FSMContext):
     """Обработка ФИО для курьера."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите ФИО текстом.")
+        return
+    
     name = message.text.strip()
     
     if len(name) < 3 or len(name.split()) < 2:
@@ -274,6 +294,10 @@ async def process_courier_name(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_courier_datetime)
 async def process_courier_datetime(message: Message, state: FSMContext):
     """Обработка даты/времени для курьера."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите дату и время текстом.")
+        return
+    
     datetime_str = message.text.strip()
     
     if len(datetime_str) < 5:
@@ -348,6 +372,13 @@ async def delivery_pickup_start(callback: CallbackQuery, state: FSMContext):
 @router.message(OrderStates.entering_pickup_phone)
 async def process_pickup_phone(message: Message, state: FSMContext):
     """Обработка телефона для самовывоза."""
+    if not message.text:
+        await message.answer(
+            "📝 Пожалуйста, введите номер телефона текстом.",
+            reply_markup=get_back_keyboard("back_to_delivery"),
+        )
+        return
+    
     is_valid, phone = validate_phone(message.text)
     
     if not is_valid:
@@ -376,6 +407,10 @@ async def process_pickup_phone(message: Message, state: FSMContext):
 @router.message(OrderStates.entering_pickup_name)
 async def process_pickup_name(message: Message, state: FSMContext):
     """Обработка имени для самовывоза."""
+    if not message.text:
+        await message.answer("📝 Пожалуйста, введите имя текстом.")
+        return
+    
     name = message.text.strip()
     
     if len(name) < 2:
