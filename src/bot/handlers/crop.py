@@ -42,11 +42,15 @@ def get_crop_webapp_keyboard(order_id: int):
 @router.message(F.web_app_data)
 async def handle_webapp_data(message: Message, state: FSMContext):
     """Обработка данных из Mini App."""
+    logger.info(f"=== WEB APP DATA RECEIVED ===")
+    logger.info(f"Raw data: {message.web_app_data.data[:500] if message.web_app_data else 'None'}")
+    
     try:
         data = json.loads(message.web_app_data.data)
-        logger.info(f"Received crop data from Mini App: {data}")
+        logger.info(f"Parsed crop data: {data}")
         
         photos = data.get("photos", [])
+        logger.info(f"Photos count: {len(photos)}")
         
         if not photos:
             await message.answer("⚠️ Не получены данные кадрирования")
@@ -61,6 +65,8 @@ async def handle_webapp_data(message: Message, state: FSMContext):
                 photo_id = photo_data.get("id")
                 crop = photo_data.get("crop")
                 
+                logger.info(f"Processing photo {photo_id}: crop={crop}")
+                
                 if photo_id and crop:
                     await service.update_photo_crop(
                         photo_id=photo_id,
@@ -69,22 +75,34 @@ async def handle_webapp_data(message: Message, state: FSMContext):
                     )
                     saved_count += 1
         
+        logger.info(f"Saved {saved_count} photos crop data")
+        
+        # Сразу показываем меню доставки
+        from src.bot.keyboards.main import get_delivery_keyboard
+        
         await message.answer(
             f"✅ Кадрирование сохранено!\n"
             f"Обработано фото: {saved_count} шт.\n\n"
-            f"Теперь выберите способ доставки:",
-            reply_markup=get_main_menu_keyboard()
+            "📦 <b>Выберите способ доставки:</b>\n\n"
+            "🟠 <b>OZON</b> — до пункта выдачи OZON\n"
+            "🔴 <b>СДЭК</b> — до пункта выдачи СДЭК\n"
+            "📬 <b>Почта России</b> — до почтового отделения\n"
+            "🚗 <b>Курьер по Москве</b> — доставка до двери\n"
+            "🏠 <b>Самовывоз</b> — бесплатно, м. Чертановская",
+            reply_markup=get_delivery_keyboard(),
+            parse_mode="HTML"
         )
         
         # Переходим к выбору доставки
         await state.set_state(OrderStates.selecting_delivery)
+        logger.info("State set to selecting_delivery")
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse webapp data: {e}")
         await message.answer("❌ Ошибка обработки данных. Попробуйте ещё раз.")
     except Exception as e:
-        logger.error(f"Error handling webapp data: {e}")
-        await message.answer("❌ Произошла ошибка. Попробуйте ещё раз.")
+        logger.exception(f"Error handling webapp data: {e}")
+        await message.answer(f"❌ Произошла ошибка: {str(e)[:100]}")
 
 
 @router.callback_query(F.data == "skip_crop")
