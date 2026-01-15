@@ -17,10 +17,10 @@ class PhotoCropperApp {
         
         // Format aspect ratios (width/height)
         this.formatRatios = {
-            'polaroid_standard': 0.76,  // 7.6 / 10
-            'polaroid_wide': 0.85,      // ~wider
-            'instax': 0.628,            // 5.4 / 8.6
-            'classic': 0.667            // 10 / 15
+            'polaroid_standard': 0.76,
+            'polaroid_wide': 0.85,
+            'instax': 0.628,
+            'classic': 0.667
         };
         
         // DOM elements
@@ -53,12 +53,10 @@ class PhotoCropperApp {
     }
     
     init() {
-        // Initialize Telegram WebApp
         if (this.tg) {
             this.tg.ready();
             this.tg.expand();
             
-            // Set theme
             document.documentElement.style.setProperty('--bg-primary', 
                 this.tg.themeParams.bg_color || '#17212b');
             document.documentElement.style.setProperty('--bg-secondary', 
@@ -69,28 +67,21 @@ class PhotoCropperApp {
                 this.tg.themeParams.button_color || '#5eb5f7');
         }
         
-        // Bind events
         this.bindEvents();
-        
-        // Load photos data from URL params or initData
         this.loadPhotosData();
     }
     
     bindEvents() {
-        // Navigation
         this.elements.btnPrev.addEventListener('click', () => this.navigate(-1));
         this.elements.btnNext.addEventListener('click', () => this.navigate(1));
         
-        // Actions
         this.elements.btnReset.addEventListener('click', () => this.resetCrop());
         this.elements.btnAutoCrop.addEventListener('click', () => this.autoCrop());
         this.elements.btnRotate.addEventListener('click', () => this.rotate());
         this.elements.btnFlip.addEventListener('click', () => this.flip());
         
-        // Save
         this.elements.btnSave.addEventListener('click', () => this.saveAll());
         
-        // Keyboard navigation
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft') this.navigate(-1);
             if (e.key === 'ArrowRight') this.navigate(1);
@@ -98,32 +89,24 @@ class PhotoCropperApp {
     }
     
     async loadPhotosData() {
-        // Try URL params for order_id
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
         
         if (orderId) {
-            // Load from API
             try {
                 this.showLoading(true);
-                
-                // Определяем базовый URL API
-            // Берём из URL параметра api_url или используем дефолт
-            const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
-                
+                const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
                 const response = await fetch(`${apiBase}/api/photos/${orderId}`);
                 
                 if (response.ok) {
                     const data = await response.json();
                     this.photos = data.photos.map(p => ({
                         ...p,
-                        // Преобразуем URL если нужно
                         url: p.url.startsWith('http') ? p.url : `${apiBase}${p.url}`
                     }));
                     this.orderId = data.order_id;
                     this.orderNumber = data.order_number;
                 } else {
-                    console.error('API error:', response.status);
                     this.photos = this.getDemoPhotos();
                 }
             } catch (e) {
@@ -131,7 +114,6 @@ class PhotoCropperApp {
                 this.photos = this.getDemoPhotos();
             }
         } else {
-            // Try to get data from Telegram
             if (this.tg?.initDataUnsafe?.start_param) {
                 try {
                     const data = JSON.parse(atob(this.tg.initDataUnsafe.start_param));
@@ -141,20 +123,17 @@ class PhotoCropperApp {
                 }
             }
             
-            // Demo mode if no data
             if (this.photos.length === 0) {
                 this.photos = this.getDemoPhotos();
             }
         }
         
-        // Initialize UI
         this.elements.totalPhotos.textContent = this.photos.length;
         this.renderNavDots();
         this.loadPhoto(0);
     }
     
     getDemoPhotos() {
-        // Demo photos for testing without bot
         return [
             {
                 id: 1,
@@ -185,8 +164,6 @@ class PhotoCropperApp {
     
     renderNavDots() {
         this.elements.navDots.innerHTML = '';
-        
-        // Show dots only if <= 10 photos
         if (this.photos.length <= 10) {
             this.photos.forEach((_, index) => {
                 const dot = document.createElement('div');
@@ -201,8 +178,6 @@ class PhotoCropperApp {
         const dots = this.elements.navDots.querySelectorAll('.nav-dot');
         dots.forEach((dot, index) => {
             dot.classList.toggle('active', index === this.currentIndex);
-            
-            // Mark edited photos
             const photoId = this.photos[index].id;
             if (this.cropData[photoId]) {
                 dot.classList.add('edited');
@@ -213,29 +188,23 @@ class PhotoCropperApp {
     async loadPhoto(index) {
         if (index < 0 || index >= this.photos.length) return;
         
-        // Save current crop before switching
         this.saveCropData();
-        
         this.currentIndex = index;
         const photo = this.photos[index];
         
-        // Show loading
         this.showLoading(true);
         
-        // Destroy previous cropper
         if (this.cropper) {
             this.cropper.destroy();
             this.cropper = null;
         }
         
-        // Update UI
         this.elements.currentIndex.textContent = index + 1;
         this.elements.formatBadge.textContent = photo.format_name || 'Полароид';
         this.updateConfidenceIndicator(photo);
         this.updateNavigation();
         this.updateNavDots();
         
-        // Load image
         try {
             await this.loadImage(photo.url);
             this.initCropper(photo);
@@ -273,7 +242,6 @@ class PhotoCropperApp {
             toggleDragModeOnDblclick: false,
             
             ready: () => {
-                // Apply saved or auto crop data
                 const savedCrop = this.cropData[photo.id];
                 if (savedCrop) {
                     this.cropper.setData(savedCrop);
@@ -283,7 +251,6 @@ class PhotoCropperApp {
             },
             
             crop: () => {
-                // Mark as edited
                 this.elements.hint.classList.add('hidden');
             }
         });
@@ -298,19 +265,17 @@ class PhotoCropperApp {
         
         dot.classList.remove('medium', 'low');
         
-        // Определяем текст в зависимости от метода и уверенности
         if (method === 'face') {
             if (facesFound === 1) {
                 text.textContent = '👤 Лицо найдено';
             } else if (facesFound > 1) {
                 dot.classList.add('medium');
-                text.textContent = `👥 Найдено ${facesFound} лица`;
+                text.textContent = '👥 Найдено ' + facesFound + ' лица';
             }
         } else if (method === 'saliency') {
             dot.classList.add('medium');
             text.textContent = '🎯 Авто-фокус';
         } else {
-            // center
             if (confidence >= 0.8) {
                 text.textContent = 'По центру';
             } else {
@@ -319,7 +284,6 @@ class PhotoCropperApp {
             }
         }
         
-        // Цвет точки по уверенности
         if (confidence < 0.5) {
             dot.classList.add('low');
         } else if (confidence < 0.8) {
@@ -347,7 +311,7 @@ class PhotoCropperApp {
         if (!this.cropper) return;
         
         const photo = this.photos[this.currentIndex];
-        const data = this.cropper.getData(true); // rounded values
+        const data = this.cropper.getData(true);
         
         this.cropData[photo.id] = {
             x: data.x,
@@ -378,14 +342,12 @@ class PhotoCropperApp {
         
         const photo = this.photos[this.currentIndex];
         
-        // Reset to auto crop or center
         if (photo.auto_crop) {
             this.cropper.setData(photo.auto_crop);
         } else {
             this.cropper.reset();
         }
         
-        // Remove from edited
         delete this.cropData[photo.id];
         this.updateNavDots();
         
@@ -401,7 +363,6 @@ class PhotoCropperApp {
             this.cropper.setData(photo.auto_crop);
             this.showToast('🎯', 'Автокадр применён');
         } else {
-            // Center crop
             this.cropper.reset();
             this.showToast('🎯', 'По центру');
         }
@@ -424,10 +385,12 @@ class PhotoCropperApp {
         this.loadPhoto(this.currentIndex);
     }
     
-    saveAll() {
+    async saveAll() {
         this.saveCropData();
         
         const result = {
+            order_id: this.orderId,
+            user_id: this.tg?.initDataUnsafe?.user?.id || null,
             photos: this.photos.map(photo => ({
                 id: photo.id,
                 crop: this.cropData[photo.id] || photo.auto_crop || null
@@ -435,35 +398,44 @@ class PhotoCropperApp {
         };
         
         const saveBtn = document.getElementById('btnSave');
-        const jsonData = JSON.stringify(result);
+        saveBtn.innerHTML = '⏳';
+        saveBtn.disabled = true;
         
-        if (this.tg) {
-            // Telegram mode - visual debug via button
-            saveBtn.innerHTML = '⏳ TG...';
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
             
-            setTimeout(() => {
-                saveBtn.innerHTML = '📦 ' + jsonData.length + 'b';
+            const response = await fetch(apiBase + '/api/crop/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(result)
+            });
+            
+            if (response.ok) {
+                saveBtn.innerHTML = '✅';
+                this.showToast('✅', 'Сохранено!');
                 
                 setTimeout(() => {
-                    try {
-                        saveBtn.innerHTML = '📤 send';
-                        this.tg.sendData(jsonData);
-                        saveBtn.innerHTML = '✅ OK';
-                        setTimeout(() => { 
-                            saveBtn.innerHTML = '🚪';
-                            this.tg.close(); 
-                        }, 1000);
-                    } catch(e) {
-                        saveBtn.innerHTML = '❌';
+                    if (this.tg && this.tg.close) {
+                        this.tg.close();
+                    } else {
+                        this.showToast('ℹ️', 'Закройте окно');
                     }
-                }, 500);
-            }, 500);
-        } else {
-            // Demo mode
-            alert('Demo: ' + jsonData.length + ' bytes\n\n' + jsonData.substring(0, 200));
+                }, 1000);
+            } else {
+                const error = await response.text();
+                throw new Error(error || 'API error');
+            }
+        } catch (e) {
+            console.error('Save error:', e);
+            saveBtn.innerHTML = '❌';
+            saveBtn.disabled = false;
+            this.showToast('❌', 'Ошибка: ' + e.message, 'error');
         }
     }
-
+    
     showToast(icon, text, type = '') {
         const toast = this.elements.toast;
         toast.querySelector('.toast-icon').textContent = icon;
@@ -476,9 +448,7 @@ class PhotoCropperApp {
     }
 }
 
-// Initialize app
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new PhotoCropperApp();
 });
-/* cache bust 1768489802 */

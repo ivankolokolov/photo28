@@ -683,6 +683,73 @@ async def photo_proxy(file_id: str):
         await bot.session.close()
 
 
+@app.post("/api/crop/save")
+async def save_crop_data(request: Request):
+    """API для Mini App: сохранение данных кадрирования."""
+    import json
+    from aiogram import Bot
+    from src.bot.keyboards.main import get_delivery_keyboard
+    
+    data = await request.json()
+    order_id = data.get("order_id")
+    user_id = data.get("user_id")
+    photos = data.get("photos", [])
+    
+    if not order_id:
+        raise HTTPException(status_code=400, detail="order_id is required")
+    
+    if not photos:
+        raise HTTPException(status_code=400, detail="No photos data provided")
+    
+    async with async_session() as session:
+        service = OrderService(session)
+        order = await service.get_order_by_id(order_id)
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        # Сохраняем данные кропа для каждого фото
+        saved_count = 0
+        for photo_data in photos:
+            photo_id = photo_data.get("id")
+            crop = photo_data.get("crop")
+            
+            if photo_id and crop:
+                await service.update_photo_crop(
+                    photo_id=photo_id,
+                    crop_data=json.dumps(crop),
+                    crop_confirmed=True
+                )
+                saved_count += 1
+    
+    # Отправляем сообщение пользователю через бота
+    telegram_user_id = user_id or order.user.telegram_id
+    if telegram_user_id:
+        bot = Bot(token=settings.bot_token)
+        try:
+            await bot.send_message(
+                chat_id=telegram_user_id,
+                text=(
+                    f"✅ <b>Кадрирование сохранено!</b>\n"
+                    f"Обработано фото: {saved_count} шт.\n\n"
+                    "📦 <b>Выберите способ доставки:</b>\n\n"
+                    "🟠 <b>OZON</b> — до пункта выдачи OZON\n"
+                    "🔴 <b>СДЭК</b> — до пункта выдачи СДЭК\n"
+                    "📬 <b>Почта России</b> — до почтового отделения\n"
+                    "🚗 <b>Курьер по Москве</b> — доставка до двери\n"
+                    "🏠 <b>Самовывоз</b> — бесплатно, м. Чертановская"
+                ),
+                reply_markup=get_delivery_keyboard(),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"Failed to send message to user: {e}")
+        finally:
+            await bot.session.close()
+    
+    return {"status": "ok", "saved_count": saved_count}
+
+
 # ============== АНАЛИТИКА ==============
 
 @app.get("/analytics", response_class=HTMLResponse)

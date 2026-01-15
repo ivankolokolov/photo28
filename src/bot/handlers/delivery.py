@@ -78,7 +78,7 @@ async def select_delivery(callback: CallbackQuery, state: FSMContext):
 
 # ================== ОЗОН ДОСТАВКА ==================
 
-@router.callback_query(OrderStates.selecting_delivery, F.data == "delivery:ozon")
+@router.callback_query(F.data == "delivery:ozon")
 async def delivery_ozon_start(callback: CallbackQuery, state: FSMContext):
     """Начало ввода данных ОЗОН — запрос телефона."""
     await state.update_data(delivery_type="ozon")
@@ -181,7 +181,7 @@ async def process_ozon_city(message: Message, state: FSMContext):
 
 # ================== КУРЬЕРСКАЯ ДОСТАВКА ==================
 
-@router.callback_query(OrderStates.selecting_delivery, F.data == "delivery:courier")
+@router.callback_query(F.data == "delivery:courier")
 async def delivery_courier_start(callback: CallbackQuery, state: FSMContext):
     """Начало ввода данных курьера — запрос телефона."""
     await state.update_data(delivery_type="courier")
@@ -350,7 +350,7 @@ async def process_courier_datetime(message: Message, state: FSMContext):
 
 # ================== САМОВЫВОЗ ==================
 
-@router.callback_query(OrderStates.selecting_delivery, F.data == "delivery:pickup")
+@router.callback_query(F.data == "delivery:pickup")
 async def delivery_pickup_start(callback: CallbackQuery, state: FSMContext):
     """Начало ввода данных самовывоза — запрос телефона."""
     await state.update_data(delivery_type="pickup")
@@ -456,7 +456,7 @@ async def process_pickup_name(message: Message, state: FSMContext):
 
 # ================== СВЯЗЬ С МЕНЕДЖЕРОМ ==================
 
-@router.callback_query(OrderStates.selecting_delivery, F.data == "delivery:manager")
+@router.callback_query(F.data == "delivery:manager")
 async def delivery_manager(callback: CallbackQuery, state: FSMContext):
     """Связь с менеджером."""
     manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
