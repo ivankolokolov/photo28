@@ -440,7 +440,24 @@ class PhotoCropperApp {
         
         // Send to Telegram bot
         if (this.tg) {
-            this.tg.sendData(JSON.stringify(result));
+            try {
+                this.showToast('✅', 'Сохраняю...');
+                
+                // Отправляем данные боту
+                this.tg.sendData(JSON.stringify(result));
+                
+                // sendData должен автоматически закрыть Mini App
+                // Но на всякий случай закрываем явно через 500ms
+                setTimeout(() => {
+                    if (this.tg) {
+                        this.tg.close();
+                    }
+                }, 500);
+                
+            } catch (e) {
+                console.error('Error sending data:', e);
+                this.showToast('❌', 'Ошибка сохранения', 'error');
+            }
         } else {
             // Demo mode - just show result
             this.showToast('✅', `Сохранено ${this.photos.length} фото`);
