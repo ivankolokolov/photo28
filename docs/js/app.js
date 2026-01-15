@@ -425,10 +425,8 @@ class PhotoCropperApp {
     }
     
     saveAll() {
-        // Save current crop
         this.saveCropData();
         
-        // Prepare result
         const result = {
             photos: this.photos.map(photo => ({
                 id: photo.id,
@@ -436,56 +434,36 @@ class PhotoCropperApp {
             }))
         };
         
-        // Debug info
-        const debugInfo = {
-            hasTg: !!this.tg,
-            photosCount: this.photos.length,
-            orderId: this.orderId || 'none',
-            dataSize: JSON.stringify(result).length
-        };
+        const saveBtn = document.getElementById('btnSave');
+        const jsonData = JSON.stringify(result);
         
-        console.log('Saving crop data:', result);
-        console.log('Debug:', debugInfo);
-        
-        // Send to Telegram bot
-        if (this.tg && this.tg.sendData) {
-            try {
-                this.showToast('📤', 'Отправляю...');
-                
-                const jsonData = JSON.stringify(result);
-                
-                // Отправляем данные боту
-                this.tg.sendData(jsonData);
-                
-                // sendData должен автоматически закрыть Mini App
-                // Но на всякий случай закрываем явно через 1 сек
-                setTimeout(() => {
-                    this.showToast('✅', 'Закрываю...');
-                    setTimeout(() => {
-                        if (this.tg && this.tg.close) {
-                            this.tg.close();
-                        }
-                    }, 500);
-                }, 500);
-                
-            } catch (e) {
-                console.error('Error sending data:', e);
-                alert('Ошибка: ' + e.message);
-                this.showToast('❌', 'Ошибка', 'error');
-            }
-        } else {
-            // Demo mode or no Telegram - show debug
-            const msg = `Debug Info:\n` +
-                `Telegram WebApp: ${debugInfo.hasTg ? 'Да' : 'Нет'}\n` +
-                `Фото: ${debugInfo.photosCount}\n` +
-                `Order ID: ${debugInfo.orderId}\n\n` +
-                `Данные: ${debugInfo.dataSize} bytes`;
+        if (this.tg) {
+            // Telegram mode - visual debug via button
+            saveBtn.innerHTML = '⏳ TG...';
             
-            alert(msg);
-            this.showToast('ℹ️', 'Demo режим');
+            setTimeout(() => {
+                saveBtn.innerHTML = '📦 ' + jsonData.length + 'b';
+                
+                setTimeout(() => {
+                    try {
+                        saveBtn.innerHTML = '📤 send';
+                        this.tg.sendData(jsonData);
+                        saveBtn.innerHTML = '✅ OK';
+                        setTimeout(() => { 
+                            saveBtn.innerHTML = '🚪';
+                            this.tg.close(); 
+                        }, 1000);
+                    } catch(e) {
+                        saveBtn.innerHTML = '❌';
+                    }
+                }, 500);
+            }, 500);
+        } else {
+            // Demo mode
+            alert('Demo: ' + jsonData.length + ' bytes\n\n' + jsonData.substring(0, 200));
         }
     }
-    
+
     showToast(icon, text, type = '') {
         const toast = this.elements.toast;
         toast.querySelector('.toast-icon').textContent = icon;
