@@ -436,37 +436,53 @@ class PhotoCropperApp {
             }))
         };
         
+        // Debug info
+        const debugInfo = {
+            hasTg: !!this.tg,
+            photosCount: this.photos.length,
+            orderId: this.orderId || 'none',
+            dataSize: JSON.stringify(result).length
+        };
+        
         console.log('Saving crop data:', result);
+        console.log('Debug:', debugInfo);
         
         // Send to Telegram bot
-        if (this.tg) {
+        if (this.tg && this.tg.sendData) {
             try {
-                this.showToast('✅', 'Сохраняю...');
+                this.showToast('📤', 'Отправляю...');
+                
+                const jsonData = JSON.stringify(result);
                 
                 // Отправляем данные боту
-                this.tg.sendData(JSON.stringify(result));
+                this.tg.sendData(jsonData);
                 
                 // sendData должен автоматически закрыть Mini App
-                // Но на всякий случай закрываем явно через 500ms
+                // Но на всякий случай закрываем явно через 1 сек
                 setTimeout(() => {
-                    if (this.tg) {
-                        this.tg.close();
-                    }
+                    this.showToast('✅', 'Закрываю...');
+                    setTimeout(() => {
+                        if (this.tg && this.tg.close) {
+                            this.tg.close();
+                        }
+                    }, 500);
                 }, 500);
                 
             } catch (e) {
                 console.error('Error sending data:', e);
-                this.showToast('❌', 'Ошибка сохранения', 'error');
+                alert('Ошибка: ' + e.message);
+                this.showToast('❌', 'Ошибка', 'error');
             }
         } else {
-            // Demo mode - just show result
-            this.showToast('✅', `Сохранено ${this.photos.length} фото`);
-            console.log('Result (demo mode):', JSON.stringify(result, null, 2));
+            // Demo mode or no Telegram - show debug
+            const msg = `Debug Info:\n` +
+                `Telegram WebApp: ${debugInfo.hasTg ? 'Да' : 'Нет'}\n` +
+                `Фото: ${debugInfo.photosCount}\n` +
+                `Order ID: ${debugInfo.orderId}\n\n` +
+                `Данные: ${debugInfo.dataSize} bytes`;
             
-            // Close after delay in demo mode
-            setTimeout(() => {
-                alert('Данные кропа:\n' + JSON.stringify(result, null, 2));
-            }, 1000);
+            alert(msg);
+            this.showToast('ℹ️', 'Demo режим');
         }
     }
     
