@@ -97,6 +97,23 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.set_state(OrderStates.selecting_format)
 
 
+@router.message(Command("chatid"))
+async def cmd_chatid(message: Message):
+    """Показывает Chat ID текущего чата."""
+    chat_id = message.chat.id
+    chat_type = message.chat.type
+    chat_title = message.chat.title or "Личный чат"
+    
+    await message.answer(
+        f"📍 <b>Информация о чате:</b>\n\n"
+        f"Chat ID: <code>{chat_id}</code>\n"
+        f"Тип: {chat_type}\n"
+        f"Название: {chat_title}\n\n"
+        f"Скопируйте Chat ID и вставьте в настройках админки.",
+        parse_mode="HTML",
+    )
+
+
 @router.callback_query(F.data.startswith("continue_order:"))
 async def continue_order(callback: CallbackQuery, state: FSMContext):
     """Продолжение существующего заказа."""
