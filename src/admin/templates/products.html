@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Товары — Photo28 Admin{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <h1>🏷 Товары и форматы</h1>
+    <button onclick="document.getElementById('addModal').style.display='flex'" class="btn btn-primary" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+        ➕ Добавить товар
+    </button>
+</div>
+
+{% if saved %}
+<div style="background: #1a3a1a; border: 1px solid #2d5a2d; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; color: #4CAF50;">
+    ✅ Изменения сохранены! Перезапустите бота для обновления кеша.
+</div>
+{% endif %}
+
+<div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 24px; color: #888; font-size: 13px;">
+    💡 <b>Иерархия:</b> Товары верхнего уровня с дочерними — это категории (Полароид → Вертикальный, Горизонтальный).
+    Товары без дочерних — самостоятельные (Большие, Альбом). Ценовая группа объединяет товары для подсчёта тиров.
+</div>
+
+<!-- Таблица товаров -->
+<div style="overflow-x: auto;">
+<table style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr style="border-bottom: 2px solid #333; color: #888; font-size: 13px; text-align: left;">
+            <th style="padding: 10px 8px;">Название</th>
+            <th style="padding: 10px 8px;">Slug</th>
+            <th style="padding: 10px 8px;">Цена</th>
+            <th style="padding: 10px 8px;">Тип</th>
+            <th style="padding: 10px 8px;">Группа</th>
+            <th style="padding: 10px 8px;">Порядок</th>
+            <th style="padding: 10px 8px;">Статус</th>
+            <th style="padding: 10px 8px;">Действия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr style="border-bottom: 1px solid #222; background: {% if not product.is_active %}#1a1a1a{% else %}transparent{% endif %};">
+            <td style="padding: 10px 8px; font-weight: 600;">
+                {{ product.emoji }} {{ product.name }}
+                {% if children_map.get(product.id) %}
+                    <span style="color: #888; font-size: 12px;">(категория)</span>
+                {% endif %}
+            </td>
+            <td style="padding: 10px 8px; color: #888; font-family: monospace; font-size: 12px;">{{ product.slug }}</td>
+            <td style="padding: 10px 8px;">
+                {% if product.price_per_unit > 0 %}
+                    {{ product.price_per_unit }}₽
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td style="padding: 10px 8px; color: #888; font-size: 12px;">{{ product.price_type }}</td>
+            <td style="padding: 10px 8px; color: #888; font-size: 12px;">{{ product.pricing_group or '—' }}</td>
+            <td style="padding: 10px 8px; color: #888;">{{ product.sort_order }}</td>
+            <td style="padding: 10px 8px;">
+                {% if product.is_active %}
+                    <span style="color: #4CAF50;">✅ Вкл</span>
+                {% else %}
+                    <span style="color: #f44336;">❌ Выкл</span>
+                {% endif %}
+            </td>
+            <td style="padding: 10px 8px; white-space: nowrap;">
+                <button onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.short_name }}', '{{ product.emoji }}', '{{ product.description or '' }}', {{ product.price_per_unit }}, '{{ product.price_type }}', '{{ product.price_tiers or '' }}', '{{ product.pricing_group or '' }}', {{ product.aspect_ratio or 'null' }}, {{ product.sort_order }})" style="background: #1a3a5e; color: #4da6ff; border: 1px solid #2a4a7e; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                    ✏️
+                </button>
+                <form method="POST" action="/products/{{ product.id }}/toggle" style="display: inline;">
+                    <button type="submit" style="background: {% if product.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if product.is_active %}#ff9800{% else %}#4CAF50{% endif %}; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                        {% if product.is_active %}⏸{% else %}▶️{% endif %}
+                    </button>
+                </form>
+                <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить товар?');">
+                    <button type="submit" style="background: #3a1a1a; color: #f44336; border: 1px solid #5a2a2a; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                        🗑
+                    </button>
+                </form>
+            </td>
+        </tr>
+        
+        <!-- Дочерние товары -->
+        {% if children_map.get(product.id) %}
+            {% for child in children_map[product.id] %}
+            <tr style="border-bottom: 1px solid #1a1a1a; background: {% if not child.is_active %}#1a1a1a{% else %}#111{% endif %};">
+                <td style="padding: 10px 8px 10px 32px; color: #ccc;">
+                    └ {{ child.emoji }} {{ child.name }}
+                </td>
+                <td style="padding: 10px 8px; color: #666; font-family: monospace; font-size: 12px;">{{ child.slug }}</td>
+                <td style="padding: 10px 8px;">{{ child.price_per_unit }}₽</td>
+                <td style="padding: 10px 8px; color: #666; font-size: 12px;">{{ child.price_type }}</td>
+                <td style="padding: 10px 8px; color: #666; font-size: 12px;">{{ child.pricing_group or '—' }}</td>
+                <td style="padding: 10px 8px; color: #666;">{{ child.sort_order }}</td>
+                <td style="padding: 10px 8px;">
+                    {% if child.is_active %}
+                        <span style="color: #4CAF50;">✅</span>
+                    {% else %}
+                        <span style="color: #f44336;">❌</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 10px 8px; white-space: nowrap;">
+                    <button onclick="editProduct({{ child.id }}, '{{ child.name }}', '{{ child.short_name }}', '{{ child.emoji }}', '{{ child.description or '' }}', {{ child.price_per_unit }}, '{{ child.price_type }}', '{{ child.price_tiers or '' }}', '{{ child.pricing_group or '' }}', {{ child.aspect_ratio or 'null' }}, {{ child.sort_order }})" style="background: #1a3a5e; color: #4da6ff; border: 1px solid #2a4a7e; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                        ✏️
+                    </button>
+                    <form method="POST" action="/products/{{ child.id }}/toggle" style="display: inline;">
+                        <button type="submit" style="background: {% if child.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if child.is_active %}#ff9800{% else %}#4CAF50{% endif %}; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                            {% if child.is_active %}⏸{% else %}▶️{% endif %}
+                        </button>
+                    </form>
+                    <form method="POST" action="/products/{{ child.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить товар?');">
+                        <button type="submit" style="background: #3a1a1a; color: #f44336; border: 1px solid #5a2a2a; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                            🗑
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        {% endif %}
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<!-- Модалка добавления -->
+<div id="addModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">➕ Новый товар</h2>
+            <button onclick="document.getElementById('addModal').style.display='none'" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;">✕</button>
+        </div>
+        
+        <form method="POST" action="/products">
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Название</label>
+                <input name="name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="Полароид вертикальный">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Короткое название</label>
+                <input name="short_name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="Полароид верт.">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Slug (уникальный ID)</label>
+                <input name="slug" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="polaroid_vertical">
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Эмодзи</label>
+                    <input name="emoji" value="📷" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Порядок сортировки</label>
+                    <input name="sort_order" type="number" value="0" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Родитель (для вариантов)</label>
+                <select name="parent_id" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+                    <option value="0">— Нет (верхний уровень) —</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.emoji }} {{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Описание</label>
+                <textarea name="description" rows="2" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;"></textarea>
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Цена за шт.</label>
+                    <input name="price_per_unit" type="number" value="0" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тип цены</label>
+                    <select name="price_type" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+                        <option value="per_unit">За штуку</option>
+                        <option value="tiered">Тиры (скидка от количества)</option>
+                        <option value="fixed">Фиксированная</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тиры цен (JSON)</label>
+                <input name="price_tiers_json" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder='[{"min_qty": 50, "price": 19}]'>
+                <div style="color: #666; font-size: 11px; margin-top: 2px;">Пример: [{"min_qty": 50, "price": 19}]</div>
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Ценовая группа</label>
+                    <input name="pricing_group" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="polaroid">
+                    <div style="color: #666; font-size: 11px; margin-top: 2px;">Товары в одной группе суммируются для тиров</div>
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Aspect ratio (Ш/В)</label>
+                    <input name="aspect_ratio" type="number" step="0.001" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="0.76">
+                </div>
+            </div>
+            <button type="submit" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                Создать товар
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Модалка редактирования -->
+<div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">✏️ Редактировать товар</h2>
+            <button onclick="document.getElementById('editModal').style.display='none'" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;">✕</button>
+        </div>
+        
+        <form id="editForm" method="POST" action="">
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Название</label>
+                <input id="edit_name" name="name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Короткое название</label>
+                <input id="edit_short_name" name="short_name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Эмодзи</label>
+                    <input id="edit_emoji" name="emoji" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Порядок</label>
+                    <input id="edit_sort_order" name="sort_order" type="number" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Описание</label>
+                <textarea id="edit_description" name="description" rows="2" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;"></textarea>
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Цена за шт.</label>
+                    <input id="edit_price" name="price_per_unit" type="number" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тип цены</label>
+                    <select id="edit_price_type" name="price_type" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+                        <option value="per_unit">За штуку</option>
+                        <option value="tiered">Тиры</option>
+                        <option value="fixed">Фиксированная</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тиры цен (JSON)</label>
+                <input id="edit_tiers" name="price_tiers_json" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            </div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Ценовая группа</label>
+                    <input id="edit_group" name="pricing_group" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Aspect ratio</label>
+                    <input id="edit_ratio" name="aspect_ratio" type="number" step="0.001" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                </div>
+            </div>
+            <button type="submit" style="width: 100%; padding: 12px; background: #4da6ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                💾 Сохранить
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+function editProduct(id, name, shortName, emoji, description, price, priceType, tiers, group, ratio, sortOrder) {
+    document.getElementById('editForm').action = '/products/' + id + '/update';
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_short_name').value = shortName;
+    document.getElementById('edit_emoji').value = emoji;
+    document.getElementById('edit_description').value = description;
+    document.getElementById('edit_price').value = price;
+    document.getElementById('edit_price_type').value = priceType;
+    document.getElementById('edit_tiers').value = tiers;
+    document.getElementById('edit_group').value = group;
+    document.getElementById('edit_ratio').value = ratio || '';
+    document.getElementById('edit_sort_order').value = sortOrder;
+    document.getElementById('editModal').style.display = 'flex';
+}
+</script>
+
+{% endblock %}

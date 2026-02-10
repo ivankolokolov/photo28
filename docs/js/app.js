@@ -15,13 +15,8 @@ class PhotoCropperApp {
         this.cropper = null;
         this.isLoading = false;
         
-        // Format aspect ratios (width/height)
-        this.formatRatios = {
-            'polaroid_standard': 0.76,
-            'polaroid_wide': 0.85,
-            'instax': 0.628,
-            'classic': 0.667
-        };
+        // Default aspect ratio (used as fallback)
+        this.defaultAspectRatio = 0.76;
         
         // DOM elements
         this.elements = {
@@ -138,24 +133,24 @@ class PhotoCropperApp {
             {
                 id: 1,
                 url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
-                format: 'polaroid_standard',
-                format_name: 'Полароид стандарт',
+                product_name: 'Полароид верт.',
+                aspect_ratio: 0.76,
                 auto_crop: { x: 0, y: 0, width: 800, height: 1052 },
                 confidence: 0.92
             },
             {
                 id: 2,
                 url: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
-                format: 'polaroid_standard',
-                format_name: 'Полароид стандарт',
+                product_name: 'Полароид верт.',
+                aspect_ratio: 0.76,
                 auto_crop: { x: 100, y: 50, width: 600, height: 789 },
                 confidence: 0.78
             },
             {
                 id: 3,
                 url: 'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800',
-                format: 'classic',
-                format_name: 'Классика 10x15',
+                product_name: 'Классика б/рамки',
+                aspect_ratio: 0.667,
                 auto_crop: { x: 0, y: 100, width: 800, height: 1200 },
                 confidence: 0.45
             }
@@ -200,7 +195,7 @@ class PhotoCropperApp {
         }
         
         this.elements.currentIndex.textContent = index + 1;
-        this.elements.formatBadge.textContent = photo.format_name || 'Полароид';
+        this.elements.formatBadge.textContent = photo.product_name || photo.format_name || 'Полароид';
         this.updateConfidenceIndicator(photo);
         this.updateNavigation();
         this.updateNavDots();
@@ -225,7 +220,7 @@ class PhotoCropperApp {
     }
     
     initCropper(photo) {
-        const ratio = this.formatRatios[photo.format] || 0.76;
+        const ratio = photo.aspect_ratio || this.defaultAspectRatio;
         
         this.cropper = new Cropper(this.elements.cropImage, {
             aspectRatio: ratio,

@@ -55,16 +55,20 @@ class NotificationService:
     
     async def notify_new_order(self, order: Order) -> bool:
         """Уведомление о новом оплаченном заказе."""
+        from src.services.product_service import ProductService
+        
         chat_id = self._get_manager_chat_id()
         if not chat_id:
             logger.warning("MANAGER_CHAT_ID не настроен, уведомление не отправлено")
             return False
         
-        photos_by_format = order.photos_by_format()
-        photos_info = "\n".join([
-            f"  • {fmt.short_name}: {count} шт."
-            for fmt, count in photos_by_format.items()
-        ])
+        photos_by_product = order.photos_by_product()
+        photos_lines = []
+        for product_id, count in photos_by_product.items():
+            product = ProductService.get_product(product_id)
+            name = product.short_name if product else f"Товар #{product_id}"
+            photos_lines.append(f"  • {name}: {count} шт.")
+        photos_info = "\n".join(photos_lines)
         
         # Информация о клиенте
         client_info = f"@{order.user.username}" if order.user.username else order.user.first_name or "Клиент"

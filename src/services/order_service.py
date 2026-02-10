@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from src.models.user import User
 from src.models.order import Order, OrderStatus, DeliveryType
-from src.models.photo import Photo, PhotoFormat
+from src.models.photo import Photo
 from src.models.promocode import Promocode
 from src.services.pricing import PricingService
 
@@ -23,7 +23,6 @@ class OrderService:
     @staticmethod
     def generate_order_number() -> str:
         """Генерирует уникальный номер заказа."""
-        # Формат: YYMMDD-XXXX (дата + 4 случайных символа)
         date_part = datetime.now().strftime("%y%m%d")
         random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
         return f"{date_part}-{random_part}"
@@ -43,14 +42,12 @@ class OrderService:
         user = result.scalar_one_or_none()
         
         if user:
-            # Обновляем данные пользователя
             user.username = username
             user.first_name = first_name
             user.last_name = last_name
             await self.session.commit()
             return user
         
-        # Создаём нового пользователя
         user = User(
             telegram_id=telegram_id,
             username=username,
@@ -151,30 +148,23 @@ class OrderService:
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[List[Order], int]:
-        """Поиск и фильтрация заказов с пагинацией. Возвращает (orders, total_count)."""
-        from sqlalchemy import func, or_
-        
-        # Базовый запрос
+        """Поиск и фильтрация заказов с пагинацией."""
         base_query = select(Order).where(Order.status != OrderStatus.DRAFT)
         count_query = select(func.count(Order.id)).where(Order.status != OrderStatus.DRAFT)
         
-        # Фильтр по статусу
         if status:
             base_query = base_query.where(Order.status == status)
             count_query = count_query.where(Order.status == status)
         
-        # Фильтр по дате
         if date_from:
             base_query = base_query.where(Order.created_at >= date_from)
             count_query = count_query.where(Order.created_at >= date_from)
         
         if date_to:
-            # Добавляем время до конца дня
             date_to_end = date_to.replace(hour=23, minute=59, second=59)
             base_query = base_query.where(Order.created_at <= date_to_end)
             count_query = count_query.where(Order.created_at <= date_to_end)
         
-        # Поиск по номеру заказа или username
         if search:
             search_term = f"%{search}%"
             base_query = base_query.join(User, Order.user_id == User.id).where(
@@ -192,11 +182,9 @@ class OrderService:
                 )
             )
         
-        # Получаем общее количество
         total_result = await self.session.execute(count_query)
         total_count = total_result.scalar() or 0
         
-        # Получаем заказы с пагинацией
         orders_query = (
             base_query
             .options(selectinload(Order.photos), selectinload(Order.user))
@@ -211,12 +199,9 @@ class OrderService:
         return orders, total_count
     
     async def delete_old_drafts(self, days: int = 7) -> int:
-        """Удаляет черновики старше указанного количества дней. Возвращает количество удалённых."""
-        from sqlalchemy import delete
-        
+        """Удаляет черновики старше указанного количества дней."""
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        # Сначала считаем
         count_query = select(func.count(Order.id)).where(
             Order.status == OrderStatus.DRAFT,
             Order.created_at < cutoff_date
@@ -224,7 +209,6 @@ class OrderService:
         count_result = await self.session.execute(count_query)
         count = count_result.scalar() or 0
         
-        # Удаляем
         delete_query = delete(Order).where(
             Order.status == OrderStatus.DRAFT,
             Order.created_at < cutoff_date
@@ -268,8 +252,8 @@ class OrderService:
     
     async def recalculate_order_cost(self, order: Order) -> Order:
         """Пересчитывает стоимость заказа."""
-        photos_by_format = order.photos_by_format()
-        order.photos_cost = PricingService.calculate_total_cost(photos_by_format)
+        photos_by_product = order.photos_by_product()
+        order.photos_cost = PricingService.calculate_total_cost(photos_by_product)
         
         await self.session.commit()
         await self.session.refresh(order)
@@ -280,7 +264,7 @@ class OrderService:
     async def add_photo(
         self,
         order: Order,
-        photo_format: PhotoFormat,
+        product_id: int,
         telegram_file_id: str,
         local_path: Optional[str] = None,
         is_document: bool = False,
@@ -291,12 +275,11 @@ class OrderService:
         faces_found: int = 0,
     ) -> Photo:
         """Добавляет фотографию в заказ."""
-        # Определяем позицию
         position = len(order.photos) if order.photos else 0
         
         photo = Photo(
             order_id=order.id,
-            format=photo_format,
+            product_id=product_id,
             telegram_file_id=telegram_file_id,
             local_path=local_path,
             position=position,
@@ -310,7 +293,6 @@ class OrderService:
         self.session.add(photo)
         await self.session.commit()
         
-        # Пересчитываем стоимость
         await self.session.refresh(order)
         await self.recalculate_order_cost(order)
         
@@ -322,7 +304,6 @@ class OrderService:
         await self.session.delete(photo)
         await self.session.commit()
         
-        # Пересчитываем стоимость
         order = await self.get_order_by_id(order_id)
         if order:
             await self.recalculate_order_cost(order)
@@ -377,7 +358,6 @@ class OrderService:
         order.promocode_id = promocode.id
         order.discount = discount
         
-        # Увеличиваем счётчик использований
         promocode.current_uses += 1
         
         await self.session.commit()
@@ -404,4 +384,3 @@ class OrderService:
         await self.session.commit()
         await self.session.refresh(promocode)
         return promocode
-

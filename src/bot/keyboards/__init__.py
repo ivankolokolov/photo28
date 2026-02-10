@@ -1,6 +1,7 @@
 """Клавиатуры бота."""
 from src.bot.keyboards.main import (
     get_format_keyboard,
+    get_subcategory_keyboard,
     get_photo_actions_keyboard,
     get_order_summary_keyboard,
     get_delivery_keyboard,
@@ -18,6 +19,7 @@ from src.bot.keyboards.main import (
 
 __all__ = [
     "get_format_keyboard",
+    "get_subcategory_keyboard",
     "get_photo_actions_keyboard",
     "get_order_summary_keyboard",
     "get_delivery_keyboard",
@@ -32,4 +34,3 @@ __all__ = [
     "get_crop_option_keyboard",
     "get_main_menu_keyboard",
 ]
-

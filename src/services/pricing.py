@@ -1,178 +1,164 @@
 """Сервис расчёта стоимости."""
 from typing import Dict, List, Optional
-from src.models.photo import PhotoFormat
+
+from src.models.product import Product
 
 
 class PricingService:
-    """Сервис для расчёта стоимости заказа."""
+    """Сервис для расчёта стоимости заказа.
     
-    # Цены на классические фото (за штуку)
-    CLASSIC_PRICE_PER_PHOTO = 25
-    
-    # Цены на полароид/инстакс (прогрессивная шкала)
-    # (количество, цена за комплект)
-    POLAROID_PRICE_TIERS = [
-        (1, 22),      # 1 шт = 22₽
-        (28, 560),    # 28 шт = 560₽ (20₽/шт)
-        (50, 950),    # 50 шт = 950₽ (19₽/шт)
-        (100, 1900),  # 100 шт = 1900₽ (19₽/шт)
-        (128, 2460),  # 128 шт = 2460₽
-        (150, 2850),  # 150 шт = 2850₽ (19₽/шт)
-        (200, 3800),  # 200 шт = 3800₽ (19₽/шт)
-    ]
-    
-    # Количества, при которых выгоднее заказать набор
-    SUBOPTIMAL_QUANTITIES = [
-        26, 27,  # выгоднее взять 28
-        46, 47, 49,  # выгоднее взять 50
-        94, 95, 96, 97, 98, 99,  # выгоднее взять 100
-        126, 127,  # выгоднее взять 128
-        147, 149,  # выгоднее взять 150
-        194, 195, 196, 197, 198, 199,  # выгоднее взять 200
-    ]
+    Использует кеш ProductService для получения данных о товарах.
+    """
     
     @classmethod
-    def is_polaroid_type(cls, photo_format: PhotoFormat) -> bool:
-        """Проверяет, относится ли формат к полароиду/инстаксу."""
-        return photo_format in (
-            PhotoFormat.POLAROID_STANDARD,
-            PhotoFormat.POLAROID_WIDE,
-            PhotoFormat.INSTAX,
-        )
+    def get_product(cls, product_id: int) -> Optional[Product]:
+        """Получает продукт из кеша ProductService."""
+        from src.services.product_service import ProductService
+        return ProductService.get_product(product_id)
     
     @classmethod
-    def calculate_classic_cost(cls, count: int) -> int:
-        """Рассчитывает стоимость классических фото 10х15."""
-        return count * cls.CLASSIC_PRICE_PER_PHOTO
-    
-    @classmethod
-    def calculate_polaroid_cost(cls, count: int) -> int:
-        """
-        Рассчитывает стоимость фото типа полароид/инстакс.
-        
-        Используется прогрессивная шкала:
-        - До 28 шт: 22₽/шт
-        - 28+ шт: используются наборы
-        """
-        if count <= 0:
-            return 0
-        
-        # Для малого количества - поштучная цена
-        if count < 28:
-            return count * 22
-        
-        # Находим оптимальную комбинацию наборов
-        return cls._find_optimal_polaroid_price(count)
-    
-    @classmethod
-    def _find_optimal_polaroid_price(cls, count: int) -> int:
-        """Находит оптимальную цену для заданного количества полароидов."""
-        # Сортируем тиры по убыванию количества
-        tiers = sorted(cls.POLAROID_PRICE_TIERS, key=lambda x: x[0], reverse=True)
-        
-        total_cost = 0
-        remaining = count
-        
-        # Жадный алгоритм: берём самые большие наборы
-        for tier_count, tier_price in tiers:
-            if tier_count <= remaining:
-                num_sets = remaining // tier_count
-                total_cost += num_sets * tier_price
-                remaining = remaining % tier_count
-        
-        # Остаток (меньше 28) считаем поштучно
-        if remaining > 0:
-            total_cost += remaining * 22
-        
-        return total_cost
-    
-    @classmethod
-    def calculate_total_cost(cls, photos_by_format: Dict[PhotoFormat, int]) -> int:
+    def calculate_total_cost(cls, photos_by_product: Dict[int, int]) -> int:
         """
         Рассчитывает общую стоимость фотографий.
         
         Args:
-            photos_by_format: Словарь {формат: количество}
+            photos_by_product: Словарь {product_id: количество}
         
         Returns:
             Общая стоимость в рублях
         """
+        if not photos_by_product:
+            return 0
+        
         total = 0
         
-        # Считаем классические фото отдельно
-        classic_count = photos_by_format.get(PhotoFormat.CLASSIC, 0)
-        total += cls.calculate_classic_cost(classic_count)
+        # Группируем по pricing_group для совместного подсчёта тиров
+        group_counts: Dict[str, int] = {}
+        group_products: Dict[str, List[int]] = {}
         
-        # Все полароиды/инстаксы считаем вместе (одна шкала)
-        polaroid_count = sum(
-            count for fmt, count in photos_by_format.items()
-            if cls.is_polaroid_type(fmt)
-        )
-        total += cls.calculate_polaroid_cost(polaroid_count)
+        for product_id, count in photos_by_product.items():
+            product = cls.get_product(product_id)
+            if not product:
+                continue
+            
+            if product.price_type == "fixed" or product.price_type == "per_unit":
+                if product.pricing_group:
+                    # Группируем для совместного тиерного расчёта
+                    group = product.pricing_group
+                    group_counts[group] = group_counts.get(group, 0) + count
+                    if group not in group_products:
+                        group_products[group] = []
+                    group_products[group].append(product_id)
+                else:
+                    total += product.price_per_unit * count
+            elif product.price_type == "tiered":
+                if product.pricing_group:
+                    group = product.pricing_group
+                    group_counts[group] = group_counts.get(group, 0) + count
+                    if group not in group_products:
+                        group_products[group] = []
+                    group_products[group].append(product_id)
+                else:
+                    total += cls._calculate_tiered_cost(product, count)
+        
+        # Рассчитываем стоимость по группам
+        for group, total_count in group_counts.items():
+            if group_products[group]:
+                product = cls.get_product(group_products[group][0])
+                if product:
+                    total += cls._calculate_tiered_cost(product, total_count)
         
         return total
     
     @classmethod
-    def get_price_optimization_hint(cls, photos_by_format: Dict[PhotoFormat, int]) -> Optional[str]:
-        """
-        Проверяет, есть ли возможность сэкономить заказав больше фото.
+    def _calculate_tiered_cost(cls, product: Product, count: int) -> int:
+        """Рассчитывает стоимость с учётом тиров."""
+        if count <= 0:
+            return 0
         
-        Returns:
-            Текст подсказки или None, если оптимизация не нужна
-        """
-        # Считаем общее количество полароидов/инстаксов
-        polaroid_count = sum(
-            count for fmt, count in photos_by_format.items()
-            if cls.is_polaroid_type(fmt)
-        )
+        tiers = product.get_price_tiers()
+        if not tiers:
+            return product.price_per_unit * count
         
-        # Проверяем, попадает ли количество в "невыгодные"
-        if polaroid_count in cls.SUBOPTIMAL_QUANTITIES:
-            # Находим ближайший выгодный набор
-            optimal_sets = [28, 50, 100, 128, 150, 200]
-            for optimal in optimal_sets:
-                if optimal > polaroid_count:
-                    current_cost = cls.calculate_polaroid_cost(polaroid_count)
-                    optimal_cost = cls.calculate_polaroid_cost(optimal)
-                    
-                    # Если стоимость набора меньше или равна
-                    if optimal_cost <= current_cost + (optimal - polaroid_count) * 5:
-                        return (
-                            f"💡 Рекомендуем заказать {optimal} фото вместо {polaroid_count} — "
-                            f"это будет дешевле! (набор {optimal} шт. стоит {optimal_cost}₽)"
-                        )
-                    break
+        sorted_tiers = sorted(tiers, key=lambda t: t.get("min_qty", 0), reverse=True)
         
-        return None
+        for tier in sorted_tiers:
+            if count >= tier.get("min_qty", 0):
+                return tier.get("price", product.price_per_unit) * count
+        
+        return product.price_per_unit * count
     
     @classmethod
-    def format_price_breakdown(cls, photos_by_format: Dict[PhotoFormat, int]) -> List[str]:
-        """
-        Формирует детализацию стоимости.
-        
-        Returns:
-            Список строк с описанием стоимости
-        """
+    def format_price_breakdown(cls, photos_by_product: Dict[int, int]) -> List[str]:
+        """Формирует детализацию стоимости."""
         lines = []
         
-        for fmt in PhotoFormat:
-            count = photos_by_format.get(fmt, 0)
-            if count > 0:
-                if fmt == PhotoFormat.CLASSIC:
-                    cost = cls.calculate_classic_cost(count)
-                    lines.append(f"• {fmt.short_name}: {count} шт. × {cls.CLASSIC_PRICE_PER_PHOTO}₽ = {cost}₽")
-                else:
-                    # Для полароидов показываем только количество
-                    lines.append(f"• {fmt.short_name}: {count} шт.")
+        group_counts: Dict[str, int] = {}
+        group_names: Dict[str, str] = {}
         
-        # Добавляем итог по полароидам
-        polaroid_count = sum(
-            count for fmt, count in photos_by_format.items()
-            if cls.is_polaroid_type(fmt)
-        )
-        if polaroid_count > 0:
-            polaroid_cost = cls.calculate_polaroid_cost(polaroid_count)
-            lines.append(f"  └ Итого полароид/инстакс ({polaroid_count} шт.): {polaroid_cost}₽")
+        for product_id, count in photos_by_product.items():
+            product = cls.get_product(product_id)
+            if not product:
+                continue
+            
+            if product.pricing_group:
+                group = product.pricing_group
+                group_counts[group] = group_counts.get(group, 0) + count
+                if group not in group_names:
+                    group_names[group] = product.pricing_group.capitalize()
+                lines.append(f"• {product.short_name}: {count} шт.")
+            else:
+                cost = product.price_per_unit * count
+                lines.append(f"• {product.short_name}: {count} шт. × {product.price_per_unit}₽ = {cost}₽")
+        
+        for group, total_count in group_counts.items():
+            for pid, cnt in photos_by_product.items():
+                p = cls.get_product(pid)
+                if p and p.pricing_group == group:
+                    cost = cls._calculate_tiered_cost(p, total_count)
+                    lines.append(f"  └ Итого ({total_count} шт.): {cost}₽")
+                    break
         
         return lines
-
+    
+    @classmethod
+    def get_price_optimization_hint(cls, photos_by_product: Dict[int, int]) -> Optional[str]:
+        """Подсказка об оптимизации цены."""
+        # Считаем по группам
+        group_totals: Dict[str, int] = {}
+        group_example: Dict[str, Product] = {}
+        
+        for product_id, count in photos_by_product.items():
+            product = cls.get_product(product_id)
+            if not product:
+                continue
+            
+            group_key = product.pricing_group or f"individual_{product_id}"
+            group_totals[group_key] = group_totals.get(group_key, 0) + count
+            if group_key not in group_example:
+                group_example[group_key] = product
+        
+        for group_key, total_count in group_totals.items():
+            product = group_example.get(group_key)
+            if not product:
+                continue
+            
+            tiers = product.get_price_tiers()
+            if not tiers:
+                continue
+            
+            for tier in sorted(tiers, key=lambda t: t.get("min_qty", 0)):
+                min_qty = tier.get("min_qty", 0)
+                tier_price = tier.get("price", 0)
+                
+                if total_count < min_qty and (min_qty - total_count) <= 10:
+                    current_cost = product.price_per_unit * total_count
+                    optimal_cost = tier_price * min_qty
+                    
+                    if optimal_cost <= current_cost + 200:
+                        return (
+                            f"💡 Если заказать {min_qty} шт вместо {total_count} — "
+                            f"цена за штуку станет {tier_price}₽!"
+                        )
+        
+        return None

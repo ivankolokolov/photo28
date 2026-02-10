@@ -136,14 +136,11 @@ class Order(Base):
         """Общее количество фотографий в заказе."""
         return len(self.photos) if self.photos else 0
     
-    def photos_by_format(self) -> dict:
-        """Группировка фотографий по форматам."""
+    def photos_by_product(self) -> dict:
+        """Группировка фотографий по товарам. Returns {product_id: count}."""
         from collections import Counter
-        from src.models.photo import PhotoFormat
         
         if not self.photos:
             return {}
         
-        counts = Counter(photo.format for photo in self.photos)
-        return {fmt: counts.get(fmt, 0) for fmt in PhotoFormat if counts.get(fmt, 0) > 0}
-
+        return dict(Counter(photo.product_id for photo in self.photos))

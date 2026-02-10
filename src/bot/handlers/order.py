@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from src.bot.states import OrderStates
 from src.bot.keyboards import (
     get_format_keyboard,
+    get_subcategory_keyboard,
     get_photo_actions_keyboard,
     get_order_summary_keyboard,
     get_photo_preview_keyboard,
@@ -17,17 +18,16 @@ from src.bot.keyboards import (
 from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.pricing import PricingService
+from src.services.product_service import ProductService
 from src.services.settings_service import SettingsService, SettingKeys
-from src.models.photo import PhotoFormat, Photo
+from src.models.photo import Photo
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-# Словарь для отслеживания media_group: {media_group_id: {"task": Task, "count": int, "user_id": int, "order_id": int}}
+# Словарь для отслеживания media_group
 _media_groups: Dict[str, dict] = {}
-
-# Словарь для отслеживания одиночных фото (без media_group_id): {user_id: {"task": Task, "count": int}}
 _single_photo_tasks: Dict[int, dict] = {}
 
 UPLOAD_MESSAGE = """📸 Пожалуйста, ознакомьтесь с тем, как будут кадрироваться фото:
@@ -48,12 +48,7 @@ async def analyze_photos_for_crop(
     photos: List[Photo],
     session,
 ) -> tuple[int, int, int]:
-    """
-    Анализирует фото для умного кропа.
-    
-    Returns:
-        (total, auto_approved, needs_review) — количества фото
-    """
+    """Анализирует фото для умного кропа."""
     from src.services.smart_crop_service import get_smart_crop_service, SmartCropService
     
     if not SettingsService.get_bool(SettingKeys.SMART_CROP_ENABLED, True):
@@ -72,7 +67,6 @@ async def analyze_photos_for_crop(
     needs_review = 0
     
     for photo in photos:
-        # Пропускаем уже проанализированные
         if photo.auto_crop_data:
             if photo.crop_confidence and photo.crop_confidence >= confidence_threshold:
                 auto_approved += 1
@@ -81,15 +75,16 @@ async def analyze_photos_for_crop(
             continue
         
         try:
-            # Скачиваем фото
             file = await bot.get_file(photo.telegram_file_id)
             photo_bytes = await bot.download_file(file.file_path)
             image_data = photo_bytes.read()
             
-            # Анализируем
-            result = crop_service.analyze_photo(image_data, photo.format.value)
+            # Получаем aspect_ratio из продукта
+            product = ProductService.get_product(photo.product_id)
+            aspect_ratio = product.aspect_ratio if product and product.aspect_ratio else 0.76
             
-            # Сохраняем результат
+            result = crop_service.analyze_photo(image_data, aspect_ratio=aspect_ratio)
+            
             photo.auto_crop_data = result.to_json()
             photo.crop_confidence = result.confidence
             photo.crop_method = result.method
@@ -109,13 +104,54 @@ async def analyze_photos_for_crop(
     return len(photos), auto_approved, needs_review
 
 
+# === Выбор формата (двухуровневый) ===
+
+@router.callback_query(F.data.startswith("format_cat:"))
+async def select_format_category(callback: CallbackQuery, state: FSMContext):
+    """Выбор категории формата — показываем варианты."""
+    cat_id = int(callback.data.split(":")[1])
+    product = ProductService.get_product(cat_id)
+    
+    if not product:
+        await callback.answer("Формат не найден")
+        return
+    
+    children = ProductService.get_active_children(cat_id)
+    
+    text = f"{product.emoji} <b>{product.name}</b>\n\nВыберите вариант:"
+    if product.description:
+        text = f"{product.emoji} <b>{product.name}</b>\n{product.description}\n\nВыберите вариант:"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_subcategory_keyboard(cat_id),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_formats")
+async def back_to_formats(callback: CallbackQuery, state: FSMContext):
+    """Возврат к списку форматов."""
+    await callback.message.edit_text(
+        "Выберите формат фотографий:",
+        reply_markup=get_format_keyboard(),
+    )
+    await state.set_state(OrderStates.selecting_format)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("format:"))
 async def select_format(callback: CallbackQuery, state: FSMContext):
-    """Выбор формата фотографий."""
-    format_value = callback.data.split(":")[1]
-    photo_format = PhotoFormat(format_value)
+    """Выбор конкретного формата фотографий."""
+    product_id = int(callback.data.split(":")[1])
+    product = ProductService.get_product(product_id)
     
-    await state.update_data(current_format=format_value)
+    if not product:
+        await callback.answer("Формат не найден")
+        return
+    
+    await state.update_data(current_product_id=product_id)
     
     # Получаем текущий заказ для отображения кнопок
     data = await state.get_data()
@@ -128,8 +164,15 @@ async def select_format(callback: CallbackQuery, state: FSMContext):
         if order and order.photos:
             has_photos = True
     
+    # Формируем название с учётом родителя
+    format_name = product.name
+    if product.parent_id:
+        parent = ProductService.get_product(product.parent_id)
+        if parent:
+            format_name = f"{parent.name} — {product.name}"
+    
     await callback.message.edit_text(
-        UPLOAD_MESSAGE.format(format_name=photo_format.display_name),
+        UPLOAD_MESSAGE.format(format_name=format_name),
         reply_markup=get_photo_actions_keyboard(has_photos),
         parse_mode="HTML",
         disable_web_page_preview=True,
@@ -139,12 +182,11 @@ async def select_format(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-async def _send_media_group_confirmation(
-    bot: Bot,
-    media_group_id: str,
-):
-    """Отправляет сообщение о добавленных фото из альбома после короткой задержки."""
-    await asyncio.sleep(0.5)  # Короткая задержка для сбора всех фото из альбома
+# === Загрузка фото ===
+
+async def _send_media_group_confirmation(bot: Bot, media_group_id: str):
+    """Отправляет сообщение о добавленных фото из альбома."""
+    await asyncio.sleep(0.5)
     
     group_info = _media_groups.pop(media_group_id, None)
     if not group_info:
@@ -154,7 +196,6 @@ async def _send_media_group_confirmation(
     order_id = group_info["order_id"]
     added_count = group_info.get("count", 1)
     
-    # Получаем актуальное количество фото
     async with async_session() as session:
         service = OrderService(session)
         order = await service.get_order_by_id(order_id)
@@ -174,13 +215,9 @@ async def _send_media_group_confirmation(
     )
 
 
-async def _send_single_photo_confirmation(
-    bot: Bot,
-    user_id: int,
-    order_id: int,
-):
+async def _send_single_photo_confirmation(bot: Bot, user_id: int, order_id: int):
     """Отправляет сообщение о добавленном одиночном фото."""
-    await asyncio.sleep(0.3)  # Небольшая задержка на случай быстрой отправки
+    await asyncio.sleep(0.3)
     
     single_info = _single_photo_tasks.pop(user_id, None)
     if not single_info:
@@ -188,7 +225,6 @@ async def _send_single_photo_confirmation(
     
     added_count = single_info.get("count", 1)
     
-    # Получаем актуальное количество фото
     async with async_session() as session:
         service = OrderService(session)
         order = await service.get_order_by_id(order_id)
@@ -219,15 +255,13 @@ async def _add_photo_to_batch(
     """Добавляет фото в заказ и планирует отправку подтверждения."""
     data = await state.get_data()
     order_id = data.get("order_id")
-    current_format = data.get("current_format")
+    product_id = data.get("current_product_id")
     user_id = message.from_user.id
     media_group_id = message.media_group_id
     
-    if not order_id or not current_format:
+    if not order_id or not product_id:
         await message.answer("Ошибка. Пожалуйста, начните заново: /start")
         return
-    
-    photo_format = PhotoFormat(current_format)
     
     async with async_session() as session:
         service = OrderService(session)
@@ -237,9 +271,8 @@ async def _add_photo_to_batch(
             await message.answer("Заказ не найден. Начните заново: /start")
             return
         
-        # Добавляем фото
         await service.add_photo(
-            order, photo_format, file_id,
+            order, product_id, file_id,
             is_document=is_document,
             thumbnail_file_id=thumbnail_file_id,
         )
@@ -247,7 +280,6 @@ async def _add_photo_to_batch(
     # Если это фото из альбома (media_group)
     if media_group_id:
         if media_group_id in _media_groups:
-            # Отменяем предыдущую задачу
             old_task = _media_groups[media_group_id].get("task")
             if old_task and not old_task.done():
                 old_task.cancel()
@@ -259,13 +291,11 @@ async def _add_photo_to_batch(
                 "order_id": order_id,
             }
         
-        # Создаём новую задачу
         task = asyncio.create_task(
             _send_media_group_confirmation(bot, media_group_id)
         )
         _media_groups[media_group_id]["task"] = task
     else:
-        # Одиночное фото
         if user_id in _single_photo_tasks:
             old_task = _single_photo_tasks[user_id].get("task")
             if old_task and not old_task.done():
@@ -283,9 +313,7 @@ async def _add_photo_to_batch(
 @router.message(OrderStates.uploading_photos, F.photo)
 async def handle_photo(message: Message, state: FSMContext, bot: Bot):
     """Обработка загруженного фото (сжатого)."""
-    # Берём максимальный размер для хранения
     file_id = message.photo[-1].file_id
-    # Для превью берём средний размер (или минимальный если только 1-2 размера)
     thumb_idx = min(1, len(message.photo) - 1)
     thumbnail_file_id = message.photo[thumb_idx].file_id
     await _add_photo_to_batch(message, state, bot, file_id, is_document=False, thumbnail_file_id=thumbnail_file_id)
@@ -294,7 +322,6 @@ async def handle_photo(message: Message, state: FSMContext, bot: Bot):
 @router.message(OrderStates.uploading_photos, F.document)
 async def handle_document(message: Message, state: FSMContext, bot: Bot):
     """Обработка загруженного документа (без сжатия)."""
-    # Проверяем, что это изображение
     mime_type = message.document.mime_type or ""
     if not mime_type.startswith("image/"):
         await message.answer(
@@ -304,7 +331,6 @@ async def handle_document(message: Message, state: FSMContext, bot: Bot):
         return
     
     file_id = message.document.file_id
-    # Берём thumbnail документа для превью
     thumbnail_file_id = message.document.thumbnail.file_id if message.document.thumbnail else None
     await _add_photo_to_batch(message, state, bot, file_id, is_document=True, thumbnail_file_id=thumbnail_file_id)
 
@@ -372,7 +398,6 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await callback.answer("Заказ не найден")
             return
         
-        # Проверяем минимальное количество
         min_photos = get_min_photos()
         if order.photos_count < min_photos:
             await callback.answer(
@@ -387,35 +412,29 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
         crop_show_mode = SettingsService.get(SettingKeys.CROP_SHOW_EDITOR, "problems_only")
         
         if crop_enabled and smart_crop_enabled:
-            # Показываем что анализируем
             await callback.message.edit_text(
                 f"🔍 Анализирую {order.photos_count} фото...\n"
                 "Определяю лица и важные области для кадрирования."
             )
             
-            # Анализируем фото
             total, auto_approved, needs_review = await analyze_photos_for_crop(
                 bot, order.photos, session
             )
             
-            # Решаем показывать ли редактор
             show_editor = False
             if crop_show_mode == "always":
                 show_editor = True
             elif crop_show_mode == "problems_only" and needs_review > 0:
                 show_editor = True
-            # "never" — не показываем
             
             if show_editor:
-                # Предлагаем редактор кропа
                 if needs_review > 0:
                     text = (
                         f"✅ Анализ завершён!\n\n"
                         f"📊 Результат:\n"
                         f"• Готовы к печати: {auto_approved} фото\n"
                         f"• Требуют внимания: {needs_review} фото\n\n"
-                        f"Рекомендуем проверить кадрирование для фото, "
-                        f"где были найдены несколько лиц или лица у края кадра."
+                        f"Рекомендуем проверить кадрирование."
                     )
                 else:
                     text = (
@@ -432,31 +451,38 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 await callback.answer()
                 return
         
-        # Если кроп отключён или не нужен редактор — сразу к сводке
         await show_order_summary(callback.message, order, edit=True)
     
     await state.set_state(OrderStates.reviewing_order)
     await callback.answer()
 
 
+# === Сводка заказа ===
+
 async def show_order_summary(message, order, edit: bool = False):
     """Отображает сводку заказа."""
-    photos_by_format = order.photos_by_format()
+    photos_by_product = order.photos_by_product()
     
-    # Формируем текст сводки
     lines = ["<b>📋 Ваш заказ:</b>\n"]
     
-    for fmt, count in photos_by_format.items():
-        lines.append(f"• {fmt.short_name}: {count} шт.")
+    for product_id, count in photos_by_product.items():
+        product = ProductService.get_product(product_id)
+        if product:
+            name = product.short_name
+            if product.parent_id:
+                parent = ProductService.get_product(product.parent_id)
+                if parent:
+                    name = f"{parent.short_name} {product.short_name}"
+        else:
+            name = f"Товар #{product_id}"
+        lines.append(f"• {name}: {count} шт.")
     
     lines.append(f"\nВсего фото: <b>{order.photos_count}</b> шт.")
     
-    # Расчёт стоимости
-    cost = PricingService.calculate_total_cost(photos_by_format)
+    cost = PricingService.calculate_total_cost(photos_by_product)
     lines.append(f"\n💰 Предварительная стоимость (без доставки): <b>{cost}₽</b>")
     
-    # Проверяем оптимизацию
-    hint = PricingService.get_price_optimization_hint(photos_by_format)
+    hint = PricingService.get_price_optimization_hint(photos_by_product)
     if hint:
         lines.append(f"\n{hint}")
     
@@ -475,6 +501,45 @@ async def show_order_summary(message, order, edit: bool = False):
             parse_mode="HTML",
         )
 
+
+async def show_order_summary_new(bot: Bot, chat_id: int, order):
+    """Отправляет новое сообщение со сводкой заказа."""
+    photos_by_product = order.photos_by_product()
+    
+    lines = ["<b>📋 Ваш заказ:</b>\n"]
+    
+    for product_id, count in photos_by_product.items():
+        product = ProductService.get_product(product_id)
+        if product:
+            name = product.short_name
+            if product.parent_id:
+                parent = ProductService.get_product(product.parent_id)
+                if parent:
+                    name = f"{parent.short_name} {product.short_name}"
+        else:
+            name = f"Товар #{product_id}"
+        lines.append(f"• {name}: {count} шт.")
+    
+    lines.append(f"\nВсего фото: <b>{order.photos_count}</b> шт.")
+    
+    cost = PricingService.calculate_total_cost(photos_by_product)
+    lines.append(f"\n💰 Предварительная стоимость (без доставки): <b>{cost}₽</b>")
+    
+    hint = PricingService.get_price_optimization_hint(photos_by_product)
+    if hint:
+        lines.append(f"\n{hint}")
+    
+    text = "\n".join(lines)
+    
+    await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=get_order_summary_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+# === Навигация ===
 
 @router.callback_query(F.data == "back_to_photos")
 async def back_to_photos(callback: CallbackQuery, state: FSMContext):
@@ -522,13 +587,15 @@ def _get_photo_caption(photo, idx: int, total: int, extra_text: str = "") -> str
     """Формирует подпись для фото при удалении."""
     min_photos = get_min_photos()
     
+    product = ProductService.get_product(photo.product_id)
+    product_name = product.short_name if product else "Неизвестный формат"
+    
     caption = (
         f"🗑 <b>Удаление фото</b>\n\n"
         f"Фото {idx + 1} из {total}\n"
-        f"Формат: {photo.format.short_name}"
+        f"Формат: {product_name}"
     )
     
-    # Показываем предупреждение если близко к минимуму или меньше
     if total <= min_photos:
         caption += f"\n\n⚠️ Минимальный заказ: {min_photos} фото"
     
@@ -542,12 +609,10 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
     caption = _get_photo_caption(photo, idx, total, extra_text)
     keyboard = get_photo_preview_keyboard(photo.id, idx, total)
     
-    # Получаем режим превью из настроек
     preview_mode = SettingsService.get(SettingKeys.PREVIEW_MODE, "thumbnail")
     
     if photo.is_document:
         if preview_mode == "thumbnail" and photo.thumbnail_file_id:
-            # Режим thumbnail — скачиваем и отправляем как фото
             try:
                 file = await bot.get_file(photo.thumbnail_file_id)
                 file_data = await bot.download_file(file.file_path)
@@ -561,9 +626,8 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
                 )
                 return
             except Exception:
-                pass  # Fallback к документу
+                pass
         
-        # Режим document или fallback — отправляем как документ
         await bot.send_document(
             chat_id=chat_id,
             document=photo.telegram_file_id,
@@ -572,7 +636,6 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
             parse_mode="HTML",
         )
     else:
-        # Обычное фото — используем thumbnail или оригинал
         preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
         await bot.send_photo(
             chat_id=chat_id,
@@ -585,7 +648,7 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
 
 @router.callback_query(F.data == "delete_photos")
 async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Начало удаления фото — показываем первое фото с превью."""
+    """Начало удаления фото."""
     data = await state.get_data()
     order_id = data.get("order_id")
     
@@ -597,13 +660,9 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: B
             await callback.answer("Нет фото для удаления")
             return
         
-        # Сохраняем текущий индекс фото
         await state.update_data(delete_photo_idx=0)
-        
-        # Удаляем старое сообщение
         await callback.message.delete()
         
-        # Отправляем первое фото с превью
         photo = order.photos[0]
         await _send_photo_preview(bot, callback.from_user.id, photo, 0, len(order.photos))
     
@@ -636,7 +695,6 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
         current_idx = data.get("delete_photo_idx", 0)
         current_photo = order.photos[current_idx] if current_idx < len(order.photos) else None
         
-        # Если оба фото одного типа и это не документ — можно edit_media
         same_type = current_photo and (current_photo.is_document == photo.is_document)
         if same_type and not photo.is_document:
             preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
@@ -649,7 +707,6 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
                 reply_markup=get_photo_preview_keyboard(photo.id, idx, len(order.photos)),
             )
         else:
-            # Разные типы или документ — удаляем и отправляем заново
             await callback.message.delete()
             await _send_photo_preview(bot, callback.from_user.id, photo, idx, len(order.photos))
     
@@ -678,7 +735,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await callback.answer("Заказ не найден")
             return
         
-        # Находим и удаляем фото
         photo_to_delete = None
         for photo in order.photos:
             if photo.id == photo_id:
@@ -689,11 +745,9 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await service.remove_photo(photo_to_delete)
             await callback.answer("Фото удалено ✓")
         
-        # Обновляем заказ
         order = await service.get_order_by_id(order_id)
         
         if not order.photos:
-            # Все фото удалены
             await callback.message.delete()
             await bot.send_message(
                 chat_id=callback.from_user.id,
@@ -702,7 +756,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             )
             await state.set_state(OrderStates.selecting_format)
         else:
-            # Корректируем индекс если нужно
             if current_idx >= len(order.photos):
                 current_idx = len(order.photos) - 1
             
@@ -711,7 +764,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
             photo = order.photos[current_idx]
             extra_text = f"✅ Фото удалено! Осталось: {len(order.photos)}"
             
-            # Документы нельзя показать через edit_media с InputMediaPhoto
             if not photo.is_document:
                 preview_file_id = photo.thumbnail_file_id or photo.telegram_file_id
                 await callback.message.edit_media(
@@ -723,7 +775,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot):
                     reply_markup=get_photo_preview_keyboard(photo.id, current_idx, len(order.photos)),
                 )
             else:
-                # Документ — удаляем сообщение и отправляем заново
                 await callback.message.delete()
                 await _send_photo_preview(
                     bot, callback.from_user.id, photo, current_idx, len(order.photos), extra_text
@@ -742,12 +793,10 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
         
         min_photos = get_min_photos()
         if order and order.photos_count >= min_photos:
-            # Достаточно фото — переходим к сводке
             await callback.message.delete()
             await show_order_summary_new(bot, callback.from_user.id, order)
             await state.set_state(OrderStates.reviewing_order)
         elif order and order.photos_count > 0:
-            # Недостаточно фото — переходим к добавлению
             await callback.message.delete()
             need_more = min_photos - order.photos_count
             await bot.send_message(
@@ -760,7 +809,6 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
             )
             await state.set_state(OrderStates.selecting_format)
         else:
-            # Все фото удалены
             await callback.message.delete()
             await bot.send_message(
                 chat_id=callback.from_user.id,
@@ -770,32 +818,3 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot):
             await state.set_state(OrderStates.selecting_format)
     
     await callback.answer()
-
-
-async def show_order_summary_new(bot: Bot, chat_id: int, order):
-    """Отправляет новое сообщение со сводкой заказа."""
-    photos_by_format = order.photos_by_format()
-    
-    lines = ["<b>📋 Ваш заказ:</b>\n"]
-    
-    for fmt, count in photos_by_format.items():
-        lines.append(f"• {fmt.short_name}: {count} шт.")
-    
-    lines.append(f"\nВсего фото: <b>{order.photos_count}</b> шт.")
-    
-    cost = PricingService.calculate_total_cost(photos_by_format)
-    lines.append(f"\n💰 Предварительная стоимость (без доставки): <b>{cost}₽</b>")
-    
-    hint = PricingService.get_price_optimization_hint(photos_by_format)
-    if hint:
-        lines.append(f"\n{hint}")
-    
-    text = "\n".join(lines)
-    
-    await bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_markup=get_order_summary_keyboard(),
-        parse_mode="HTML",
-    )
-

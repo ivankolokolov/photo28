@@ -65,7 +65,11 @@ class FileService:
         ext = Path(file_path).suffix or ".jpg"
         
         # Формируем имя файла: order_number_format_position.ext
-        filename = f"{order.order_number}_{photo.format.value}_{photo.position:03d}{ext}"
+        # Получаем slug продукта для имени файла
+        from src.services.product_service import ProductService
+        product = ProductService.get_product(photo.product_id)
+        product_slug = product.slug if product else f"product{photo.product_id}"
+        filename = f"{order.order_number}_{product_slug}_{photo.position:03d}{ext}"
         
         # Сохраняем файл
         order_dir = self.get_order_dir(order)

@@ -59,14 +59,6 @@ class CropResult:
 class SmartCropService:
     """Сервис умного кадрирования фотографий."""
     
-    # Соотношения сторон для форматов (ширина / высота)
-    FORMAT_RATIOS = {
-        "polaroid_standard": 0.76,   # 7.6 / 10
-        "polaroid_wide": 0.85,       # ~шире
-        "instax": 0.628,             # 5.4 / 8.6
-        "classic": 0.667,            # 10 / 15
-    }
-    
     def __init__(self, face_priority: int = 80):
         """
         Args:
@@ -89,33 +81,31 @@ class SmartCropService:
     def analyze_photo(
         self,
         image_bytes: bytes,
-        photo_format: str = "polaroid_standard",
+        aspect_ratio: float = 0.76,
     ) -> CropResult:
         """
         Анализирует фото и определяет оптимальную область кропа.
         
         Args:
             image_bytes: Байты изображения
-            photo_format: Формат фото (polaroid_standard, instax, classic)
+            aspect_ratio: Соотношение сторон (ширина/высота) целевого формата
         
         Returns:
             CropResult с координатами и уверенностью
         """
         if not _load_cv2():
-            # Если OpenCV недоступен — возвращаем центральный кроп
-            return self._fallback_center_crop(image_bytes, photo_format)
+            return self._fallback_center_crop(image_bytes, aspect_ratio)
         
         try:
-            # Декодируем изображение
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if img is None:
                 logger.error("Не удалось декодировать изображение")
-                return self._fallback_center_crop(image_bytes, photo_format)
+                return self._fallback_center_crop(image_bytes, aspect_ratio)
             
             img_height, img_width = img.shape[:2]
-            target_ratio = self.FORMAT_RATIOS.get(photo_format, 0.76)
+            target_ratio = aspect_ratio
             
             # 1. Пробуем найти лица
             faces = self._detect_faces(img)
@@ -330,19 +320,17 @@ class SmartCropService:
     def _fallback_center_crop(
         self,
         image_bytes: bytes,
-        photo_format: str,
+        aspect_ratio: float = 0.76,
     ) -> CropResult:
         """Fallback кроп без OpenCV (по центру с примерными размерами)."""
-        # Пробуем определить размер через PIL
         try:
             from PIL import Image
             img = Image.open(io.BytesIO(image_bytes))
             img_width, img_height = img.size
         except Exception:
-            # Совсем fallback — предполагаем стандартное фото
             img_width, img_height = 1920, 1080
         
-        target_ratio = self.FORMAT_RATIOS.get(photo_format, 0.76)
+        target_ratio = aspect_ratio
         crop_width, crop_height = self._calculate_crop_size(
             img_width, img_height, target_ratio
         )

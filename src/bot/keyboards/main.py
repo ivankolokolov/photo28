@@ -3,36 +3,63 @@ from typing import List, Optional
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.models.photo import PhotoFormat
 from src.models.order import Order
 
 
 def get_format_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора формата фотографий."""
+    """Динамическая клавиатура выбора формата из БД."""
+    from src.services.product_service import ProductService
+    
     builder = InlineKeyboardBuilder()
+    products = ProductService.get_top_level_products()
+    
+    for product in products:
+        children = ProductService.get_active_children(product.id)
+        if children:
+            # Категория — покажем подменю
+            callback = f"format_cat:{product.id}"
+        else:
+            # Самостоятельный товар — выбираем сразу
+            callback = f"format:{product.id}"
+        
+        # Формируем текст кнопки
+        price_hint = ""
+        if product.price_per_unit > 0:
+            price_hint = f" — {product.display_price}"
+        elif children:
+            # Для категории показываем цену первого ребёнка
+            first = children[0]
+            price_hint = f" — {first.display_price}"
+        
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{product.emoji} {product.name}{price_hint}",
+                callback_data=callback,
+            )
+        )
+    
+    return builder.as_markup()
+
+
+def get_subcategory_keyboard(parent_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора варианта внутри категории."""
+    from src.services.product_service import ProductService
+    
+    builder = InlineKeyboardBuilder()
+    children = ProductService.get_active_children(parent_id)
+    
+    for product in children:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{product.emoji} {product.name}",
+                callback_data=f"format:{product.id}",
+            )
+        )
     
     builder.row(
         InlineKeyboardButton(
-            text="📷 Полароид 7.6х10 стандарт",
-            callback_data=f"format:{PhotoFormat.POLAROID_STANDARD.value}"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="📷 Полароид 7.6х10 широкий",
-            callback_data=f"format:{PhotoFormat.POLAROID_WIDE.value}"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="📷 Инстакс 5.4х8.6",
-            callback_data=f"format:{PhotoFormat.INSTAX.value}"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="📷 Классика 10х15 без рамки",
-            callback_data=f"format:{PhotoFormat.CLASSIC.value}"
+            text="⬅️ Назад к форматам",
+            callback_data="back_to_formats",
         )
     )
     
@@ -341,7 +368,6 @@ def get_crop_option_keyboard(order_id: int) -> InlineKeyboardMarkup:
     
     builder = InlineKeyboardBuilder()
     
-    # URL Mini App на GitHub Pages с параметром api_url
     api_url = settings.admin_url or "http://localhost:8080"
     webapp_url = f"https://ivankolokolov.github.io/photo28?order_id={order_id}&api_url={quote(api_url)}"
     

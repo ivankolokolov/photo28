@@ -1,43 +1,13 @@
 """Модель фотографии."""
-from enum import Enum
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, Float, ForeignKey, Enum as SQLEnum
+from sqlalchemy import String, Integer, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
 
 if TYPE_CHECKING:
     from src.models.order import Order
-
-
-class PhotoFormat(str, Enum):
-    """Форматы фотографий."""
-    POLAROID_STANDARD = "polaroid_standard"  # Полароид 7.6х10 стандарт
-    POLAROID_WIDE = "polaroid_wide"          # Полароид 7.6х10 широкий
-    INSTAX = "instax"                         # Инстакс 5.4х8.6
-    CLASSIC = "classic"                       # Классика 10х15 без рамки
-    
-    @property
-    def display_name(self) -> str:
-        """Название формата для отображения."""
-        names = {
-            PhotoFormat.POLAROID_STANDARD: "Полароид 7.6х10 стандарт",
-            PhotoFormat.POLAROID_WIDE: "Полароид 7.6х10 широкий",
-            PhotoFormat.INSTAX: "Инстакс 5.4х8.6",
-            PhotoFormat.CLASSIC: "Классика 10х15 без рамки",
-        }
-        return names[self]
-    
-    @property
-    def short_name(self) -> str:
-        """Короткое название формата."""
-        names = {
-            PhotoFormat.POLAROID_STANDARD: "Полароид стандарт",
-            PhotoFormat.POLAROID_WIDE: "Полароид широкий",
-            PhotoFormat.INSTAX: "Инстакс",
-            PhotoFormat.CLASSIC: "Классика",
-        }
-        return names[self]
+    from src.models.product import Product
 
 
 class Photo(Base):
@@ -48,8 +18,8 @@ class Photo(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
     
-    # Формат фото
-    format: Mapped[PhotoFormat] = mapped_column(SQLEnum(PhotoFormat))
+    # Формат/товар
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     
     # Telegram file_id для быстрого доступа
     telegram_file_id: Mapped[str] = mapped_column(String(255))
@@ -81,7 +51,7 @@ class Photo(Base):
     # Количество найденных лиц
     faces_found: Mapped[int] = mapped_column(Integer, default=0)
     
-    # Финальные данные кадрирования (JSON, после редактирования пользователем)
+    # Финальные данные кадрирования
     crop_data: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     
     # Флаг: кроп подтверждён пользователем
@@ -89,7 +59,7 @@ class Photo(Base):
     
     # Relationships
     order: Mapped["Order"] = relationship(back_populates="photos")
+    product: Mapped["Product"] = relationship(back_populates="photos")
     
     def __repr__(self) -> str:
-        return f"<Photo {self.id}: {self.format.value}>"
-
+        return f"<Photo {self.id}: product={self.product_id}>"

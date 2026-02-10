@@ -36,6 +36,11 @@ async def check_restart_signal():
             async with async_session() as session:
                 service = SettingsService(session)
                 await service.load_cache()
+                
+                # Обновляем кеш товаров
+                from src.services.product_service import ProductService
+                product_service = ProductService(session)
+                await product_service.load_cache()
             
             # Проверяем немедленный перезапуск
             if SettingsService.get_bool(SettingKeys.RESTART_REQUESTED, False):
@@ -107,6 +112,14 @@ async def main():
         # Сбрасываем флаг перезапуска при старте
         await settings_service.set_value(SettingKeys.RESTART_REQUESTED, "false")
     logger.info("Настройки загружены")
+    
+    # Загрузка товаров в кеш
+    logger.info("Загрузка товаров...")
+    from src.services.product_service import ProductService
+    async with async_session() as session:
+        product_service = ProductService(session)
+        await product_service.load_cache()
+    logger.info("Товары загружены")
     
     # Создаём директории для хранения файлов
     settings.ensure_dirs()

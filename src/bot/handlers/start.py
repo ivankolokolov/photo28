@@ -10,14 +10,29 @@ from src.bot.keyboards import get_format_keyboard
 from src.database import async_session
 from src.services.order_service import OrderService
 from src.services.settings_service import SettingsService, SettingKeys
+from src.services.product_service import ProductService
 from src.models.order import OrderStatus
 
 router = Router()
 
 
 def get_welcome_message() -> str:
-    """Возвращает приветственное сообщение с актуальным username менеджера."""
+    """Возвращает приветственное сообщение с актуальными данными."""
     manager = SettingsService.get(SettingKeys.MANAGER_USERNAME, "manager")
+    
+    # Формируем список форматов динамически из БД
+    products = ProductService.get_top_level_products()
+    format_lines = []
+    for p in products:
+        children = ProductService.get_active_children(p.id)
+        if children:
+            variants = ", ".join(c.name.lower() for c in children)
+            format_lines.append(f"• {p.emoji} {p.name} ({variants})")
+        else:
+            format_lines.append(f"• {p.emoji} {p.name}")
+    
+    formats_text = "\n".join(format_lines) if format_lines else "• Форматы загружаются..."
+    
     return f"""Здравствуйте! 👋
 
 Я бот приёма заказов <b>Photo28</b>!
@@ -25,10 +40,7 @@ def get_welcome_message() -> str:
 Какой формат фотографий вы хотите напечатать?
 
 📷 <b>Форматы:</b>
-• Полароид 7.6х10 стандарт
-• Полароид 7.6х10 широкий
-• Инстакс 5.4х8.6
-• Классика 10х15 без рамки
+{formats_text}
 
 Для связи с менеджером: @{manager}"""
 
@@ -72,11 +84,9 @@ async def cmd_start(message: Message, state: FSMContext):
             last_name=message.from_user.last_name,
         )
         
-        # Проверяем, есть ли незавершённый заказ с фото
         draft_order = await service.get_user_draft_order(user)
         
         if draft_order and draft_order.photos_count > 0:
-            # Есть незавершённый заказ — предлагаем продолжить
             await message.answer(
                 CONTINUE_ORDER_MESSAGE.format(photos_count=draft_order.photos_count),
                 reply_markup=get_continue_keyboard(draft_order.id),
@@ -84,7 +94,6 @@ async def cmd_start(message: Message, state: FSMContext):
             )
             return
         
-        # Нет незавершённого заказа — создаём новый
         order = await service.create_order(user)
         await state.update_data(order_id=order.id, user_id=user.id)
     
@@ -129,7 +138,6 @@ async def continue_order(callback: CallbackQuery, state: FSMContext):
         
         await state.update_data(order_id=order.id, user_id=order.user_id)
         
-        # Показываем сводку заказа
         from src.bot.handlers.order import show_order_summary
         await show_order_summary(callback.message, order, edit=True)
     
@@ -187,7 +195,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
             last_name=message.from_user.last_name,
         )
         
-        # Проверяем незавершённый заказ
         draft_order = await service.get_user_draft_order(user)
         
         if draft_order and draft_order.photos_count > 0:
@@ -219,23 +226,5 @@ async def cmd_help(message: Message):
         "3. Выберите способ доставки\n"
         "4. Оплатите и отправьте чек\n\n"
         f"<b>Связь с менеджером:</b> @{SettingsService.get(SettingKeys.MANAGER_USERNAME, 'manager')}",
-        parse_mode="HTML",
-    )
-
-
-@router.message(Command("chatid"))
-async def cmd_chatid(message: Message):
-    """Команда /chatid — показывает ID текущего чата (для настройки уведомлений)."""
-    chat_type = message.chat.type
-    chat_id = message.chat.id
-    chat_title = message.chat.title or "Личный чат"
-    
-    await message.answer(
-        f"<b>📋 Информация о чате</b>\n\n"
-        f"🆔 Chat ID: <code>{chat_id}</code>\n"
-        f"📝 Название: {chat_title}\n"
-        f"📂 Тип: {chat_type}\n\n"
-        f"💡 Скопируйте Chat ID и вставьте в настройки админки\n"
-        f"в поле «ID чата менеджеров»",
         parse_mode="HTML",
     )

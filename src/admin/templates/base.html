@@ -15,6 +15,7 @@
         <nav class="nav">
             <a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>Дашборд</a>
             <a href="/orders" {% if "/orders" in request.url.path %}class="active"{% endif %}>Заказы</a>
+            <a href="/products" {% if request.url.path == "/products" %}class="active"{% endif %}>🏷 Товары</a>
             <a href="/analytics" {% if request.url.path == "/analytics" %}class="active"{% endif %}>📊 Аналитика</a>
             <a href="/promocodes" {% if request.url.path == "/promocodes" %}class="active"{% endif %}>Промокоды</a>
             <a href="/settings" {% if request.url.path == "/settings" %}class="active"{% endif %}>⚙️ Настройки</a>

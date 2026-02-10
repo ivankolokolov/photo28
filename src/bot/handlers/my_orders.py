@@ -89,9 +89,10 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
             await callback.answer("Заказ не найден")
             return
         
-        photos_by_format = order.photos_by_format()
+        photos_by_product = order.photos_by_product()
         
         # Формируем текст деталей
+        from src.services.product_service import ProductService
         lines = [
             f"📋 <b>Заказ #{order.order_number}</b>\n",
             f"📊 Статус: <b>{order.status.display_name}</b>",
@@ -100,8 +101,10 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext):
             "<b>Фотографии:</b>",
         ]
         
-        for fmt, count in photos_by_format.items():
-            lines.append(f"• {fmt.short_name}: {count} шт.")
+        for product_id, count in photos_by_product.items():
+            product = ProductService.get_product(product_id)
+            name = product.short_name if product else f"Товар #{product_id}"
+            lines.append(f"• {name}: {count} шт.")
         
         lines.extend([
             "",
