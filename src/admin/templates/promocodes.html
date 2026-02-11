@@ -38,6 +38,28 @@
             </div>
         </div>
         
+        <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px;">
+            <div style="color: var(--text-muted); font-size: 0.8125rem; margin-bottom: 0.75rem; font-weight: 500;">Условия применения</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" for="min_order_amount">Мин. сумма заказа ₽</label>
+                    <input type="number" id="min_order_amount" name="min_order_amount" class="form-input" placeholder="0" min="0" value="0">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" for="min_photos">Мин. кол-во фото</label>
+                    <input type="number" id="min_photos" name="min_photos" class="form-input" placeholder="0" min="0" value="0">
+                    <span style="font-size: 0.6875rem; color: var(--text-muted);">0 = без ограничения</span>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="require_subscription" name="require_subscription" value="1" style="width: 18px; height: 18px; accent-color: var(--primary);">
+                        Требовать подписку на канал
+                    </label>
+                    <span style="font-size: 0.6875rem; color: var(--text-muted);">Канал настраивается в <a href="/settings" style="color: var(--primary);">Настройках</a></span>
+                </div>
+            </div>
+        </div>
+        
         <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Создать</button>
     </form>
 </div>
@@ -53,6 +75,7 @@
                 <tr>
                     <th>Код</th>
                     <th>Скидка</th>
+                    <th>Условия</th>
                     <th>Использований</th>
                     <th>Описание</th>
                     <th>Статус</th>
@@ -70,6 +93,19 @@
                         {% elif promo.discount_amount %}
                         {{ promo.discount_amount }}₽
                         {% endif %}
+                    </td>
+                    <td style="font-size: 0.8125rem; color: var(--text-muted);">
+                        {% set conditions = [] %}
+                        {% if promo.min_order_amount > 0 %}
+                            {% set _ = conditions.append('от ' ~ promo.min_order_amount ~ '₽') %}
+                        {% endif %}
+                        {% if promo.min_photos > 0 %}
+                            {% set _ = conditions.append('от ' ~ promo.min_photos ~ ' фото') %}
+                        {% endif %}
+                        {% if promo.require_subscription %}
+                            {% set _ = conditions.append('📢 подписка') %}
+                        {% endif %}
+                        {{ conditions | join(', ') if conditions else '—' }}
                     </td>
                     <td>
                         {{ promo.current_uses }}{% if promo.max_uses %} / {{ promo.max_uses }}{% endif %}
@@ -96,7 +132,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" style="text-align: center; color: var(--text-muted);">
+                    <td colspan="8" style="text-align: center; color: var(--text-muted);">
                         Промокодов пока нет
                     </td>
                 </tr>
@@ -106,4 +142,3 @@
     </div>
 </div>
 {% endblock %}
-

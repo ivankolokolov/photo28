@@ -344,22 +344,24 @@ async def promocodes_list(request: Request):
 
 
 @app.post("/promocodes")
-async def create_promocode(
-    request: Request,
-    code: str = Form(...),
-    discount_percent: Optional[int] = Form(None),
-    discount_amount: Optional[int] = Form(None),
-    max_uses: Optional[int] = Form(None),
-    description: Optional[str] = Form(None),
-):
+async def create_promocode(request: Request):
     if not check_auth(request):
         return RedirectResponse("/login", status_code=303)
+    form = await request.form()
     async with async_session() as session:
-        service = OrderService(session)
-        await service.create_promocode(
-            code=code, discount_percent=discount_percent,
-            discount_amount=discount_amount, max_uses=max_uses, description=description,
+        from src.models.promocode import Promocode
+        promo = Promocode(
+            code=form.get("code", "").upper().strip(),
+            discount_percent=int(form["discount_percent"]) if form.get("discount_percent") else None,
+            discount_amount=int(form["discount_amount"]) if form.get("discount_amount") else None,
+            max_uses=int(form["max_uses"]) if form.get("max_uses") else None,
+            description=form.get("description") or None,
+            min_order_amount=int(form.get("min_order_amount") or 0),
+            min_photos=int(form.get("min_photos") or 0),
+            require_subscription=form.get("require_subscription") == "1",
         )
+        session.add(promo)
+        await session.commit()
     return RedirectResponse("/promocodes", status_code=303)
 
 
@@ -401,6 +403,7 @@ SETTING_GROUPS = {
     "crop": "Кадрирование",
     "delivery": "Доставка",
     "contacts": "Контакты",
+    "subscription": "Подписка на канал",
     "notifications": "Уведомления",
 }
 

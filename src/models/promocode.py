@@ -26,6 +26,8 @@ class Promocode(Base):
     
     # Ограничения
     min_order_amount: Mapped[int] = mapped_column(Integer, default=0)  # Минимальная сумма заказа
+    min_photos: Mapped[int] = mapped_column(Integer, default=0)  # Минимальное количество фото в заказе
+    require_subscription: Mapped[bool] = mapped_column(Boolean, default=False)  # Требуется подписка на канал
     max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Максимальное число использований
     current_uses: Mapped[int] = mapped_column(Integer, default=0)  # Текущее число использований
     
@@ -39,11 +41,12 @@ class Promocode(Base):
     def __repr__(self) -> str:
         return f"<Promocode {self.code}>"
     
-    def is_valid(self, order_amount: int = 0) -> tuple[bool, str]:
+    def is_valid(self, order_amount: int = 0, photos_count: int = 0) -> tuple[bool, str]:
         """
         Проверяет валидность промокода.
         
         Возвращает (is_valid, error_message).
+        Подписку на канал проверяет вызывающий код через Telegram API.
         """
         if not self.is_active:
             return False, "Промокод неактивен"
@@ -62,6 +65,11 @@ class Promocode(Base):
         if order_amount < self.min_order_amount:
             return False, f"Минимальная сумма заказа: {self.min_order_amount}₽"
         
+        if self.min_photos > 0 and photos_count < self.min_photos:
+            return False, f"Нужно минимум {self.min_photos} фото в заказе (сейчас {photos_count})"
+        
+        # require_subscription проверяется отдельно через Telegram Bot API
+        
         return True, ""
     
     def calculate_discount(self, order_amount: int) -> int:
@@ -73,4 +81,3 @@ class Promocode(Base):
             return int(order_amount * self.discount_percent / 100)
         
         return 0
-

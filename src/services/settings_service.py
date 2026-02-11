@@ -145,6 +145,9 @@ class SettingKeys:
     # Бот
     WELCOME_MESSAGE = "welcome_message"  # Приветственное сообщение (шаблон)
     
+    # Подписка
+    SUBSCRIPTION_CHANNEL = "subscription_channel"  # @username или ID канала для проверки подписки
+    
     # Уведомления
     MANAGER_CHAT_ID = "manager_chat_id"  # ID группы менеджеров для уведомлений
     NOTIFY_CLIENT_STATUS = "notify_client_status"  # Уведомлять клиента о смене статуса
@@ -294,6 +297,16 @@ DEFAULT_SETTINGS = [
         "display_name": "Приветственное сообщение",
         "description": "Шаблон приветствия. Переменные: {formats} — список форматов, {manager} — username менеджера",
         "group": "bot",
+        "sort_order": 1,
+    },
+    # Подписка
+    {
+        "key": SettingKeys.SUBSCRIPTION_CHANNEL,
+        "value": "",
+        "value_type": SettingType.STRING,
+        "display_name": "Канал для проверки подписки",
+        "description": "Username канала (напр. @photo28studio) или его ID. Бот должен быть администратором канала. Оставьте пустым если не используете.",
+        "group": "subscription",
         "sort_order": 1,
     },
     # Уведомления

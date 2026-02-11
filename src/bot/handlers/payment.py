@@ -1,4 +1,5 @@
 """Обработчики оплаты."""
+import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -14,6 +15,22 @@ from src.services.order_service import OrderService
 from src.services.notification_service import NotificationService
 from src.services.settings_service import SettingsService, SettingKeys
 from src.models.order import OrderStatus
+
+logger = logging.getLogger(__name__)
+
+
+async def check_channel_subscription(bot: Bot, user_id: int) -> bool:
+    """Проверяет подписку пользователя на канал из настроек."""
+    channel = SettingsService.get(SettingKeys.SUBSCRIPTION_CHANNEL, "")
+    if not channel:
+        return True  # Канал не настроен — проверка не нужна
+    
+    try:
+        member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+        return member.status in ("member", "administrator", "creator")
+    except Exception as e:
+        logger.warning(f"Не удалось проверить подписку на {channel}: {e}")
+        return True  # При ошибке пропускаем проверку
 
 router = Router()
 
@@ -79,8 +96,12 @@ async def enter_promocode(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(OrderStates.entering_promocode)
-async def process_promocode(message: Message, state: FSMContext):
+async def process_promocode(message: Message, state: FSMContext, bot: Bot):
     """Обработка промокода."""
+    if not message.text:
+        await message.answer("Пожалуйста, отправьте промокод текстом.")
+        return
+    
     data = await state.get_data()
     order_id = data.get("order_id")
     
@@ -105,8 +126,11 @@ async def process_promocode(message: Message, state: FSMContext):
             )
             return
         
-        # Проверяем валидность
-        is_valid, error_msg = promocode.is_valid(order.photos_cost)
+        # Проверяем валидность (с учётом количества фото)
+        is_valid, error_msg = promocode.is_valid(
+            order_amount=order.photos_cost,
+            photos_count=order.photos_count,
+        )
         
         if not is_valid:
             await message.answer(
@@ -115,6 +139,18 @@ async def process_promocode(message: Message, state: FSMContext):
                 reply_markup=get_promocode_keyboard(),
             )
             return
+        
+        # Проверяем подписку на канал (если требуется)
+        if promocode.require_subscription:
+            is_subscribed = await check_channel_subscription(bot, message.from_user.id)
+            if not is_subscribed:
+                channel = SettingsService.get(SettingKeys.SUBSCRIPTION_CHANNEL, "канал")
+                await message.answer(
+                    f"❌ Для использования этого промокода нужно подписаться на {channel}\n\n"
+                    "Подпишитесь и попробуйте ещё раз.",
+                    reply_markup=get_promocode_keyboard(),
+                )
+                return
         
         # Применяем промокод
         order = await service.apply_promocode(order, promocode)
