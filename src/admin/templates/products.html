@@ -94,7 +94,7 @@
                 {% endif %}
             </td>
             <td class="table-cell-actions">
-                <button onclick='openEditModal({{ product.id }}, {{ product | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
+                <button onclick='openEditModal({{ product.id }}, {{ {"name": product.name, "short_name": product.short_name, "emoji": product.emoji, "description": product.description or "", "price_per_unit": product.price_per_unit, "price_type": product.price_type, "price_tiers": product.price_tiers or "", "pricing_group": product.pricing_group or "", "aspect_ratio": product.aspect_ratio, "sort_order": product.sort_order} | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
                 <form method="POST" action="/products/{{ product.id }}/toggle" style="display: inline;">
                     <button type="submit" class="action-btn" style="background: {% if product.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if product.is_active %}#ff9800{% else %}#4CAF50{% endif %};">
                         {% if product.is_active %}⏸{% else %}▶️{% endif %}
@@ -127,7 +127,7 @@
                     {% if child.is_active %}<span style="color: #4CAF50;">✅</span>{% else %}<span style="color: #f44336;">❌</span>{% endif %}
                 </td>
                 <td class="table-cell-actions">
-                    <button onclick='openEditModal({{ child.id }}, {{ child | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
+                    <button onclick='openEditModal({{ child.id }}, {{ {"name": child.name, "short_name": child.short_name, "emoji": child.emoji, "description": child.description or "", "price_per_unit": child.price_per_unit, "price_type": child.price_type, "price_tiers": child.price_tiers or "", "pricing_group": child.pricing_group or "", "aspect_ratio": child.aspect_ratio, "sort_order": child.sort_order} | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
                     <form method="POST" action="/products/{{ child.id }}/toggle" style="display: inline;">
                         <button type="submit" class="action-btn" style="background: {% if child.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if child.is_active %}#ff9800{% else %}#4CAF50{% endif %};">
                             {% if child.is_active %}⏸{% else %}▶️{% endif %}
