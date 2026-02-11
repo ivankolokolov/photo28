@@ -397,6 +397,7 @@ async def toggle_promocode(request: Request, promo_id: int):
 
 SETTING_GROUPS = {
     "general": "Основные",
+    "bot": "Бот",
     "crop": "Кадрирование",
     "delivery": "Доставка",
     "contacts": "Контакты",

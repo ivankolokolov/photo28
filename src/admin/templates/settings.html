@@ -43,7 +43,7 @@
                         <option value="false" {% if setting.value.lower() not in ['true', '1', 'yes', 'да'] %}selected{% endif %}>Нет</option>
                     </select>
                     {% elif setting.value_type.value == 'text' %}
-                    <textarea class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" rows="3">{{ setting.value }}</textarea>
+                    <textarea class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" rows="8" style="font-family: monospace; font-size: 0.8125rem; line-height: 1.5;">{{ setting.value }}</textarea>
                     {% elif setting.value_type.value == 'integer' %}
                     <input type="number" class="form-input" id="setting_{{ setting.key }}" name="setting_{{ setting.key }}" value="{{ setting.value }}">
                     {% else %}
@@ -124,8 +124,16 @@
 }
 
 .setting-input textarea.form-input {
-    min-height: 100px;
+    min-height: 140px;
     resize: vertical;
+}
+
+.setting-item:has(textarea) {
+    grid-template-columns: 1fr;
+}
+
+.setting-item:has(textarea) .setting-input {
+    max-width: 100%;
 }
 
 @media (max-width: 768px) {
