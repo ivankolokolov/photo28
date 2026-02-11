@@ -3,9 +3,35 @@
 {% block title %}Товары — Photo28 Admin{% endblock %}
 
 {% block content %}
+<style>
+    .tier-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .tier-row input { flex: 1; padding: 7px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box; font-size: 13px; }
+    .tier-btn { padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; border: 1px solid #333; }
+    .tier-btn-add { background: #1a3a1a; color: #4CAF50; border-color: #2d5a2d; }
+    .tier-btn-del { background: #3a1a1a; color: #f44336; border-color: #5a2a2a; min-width: 32px; }
+    .field-label { display: block; color: #888; font-size: 13px; margin-bottom: 4px; }
+    .field-hint { color: #666; font-size: 11px; margin-top: 2px; }
+    .field-input { width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box; }
+    .field-select { width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; }
+    .field-group { margin-bottom: 12px; }
+    .field-row { display: flex; gap: 12px; margin-bottom: 12px; }
+    .field-row > div { flex: 1; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+    .modal-content { background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 520px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-close { background: none; border: none; color: #888; cursor: pointer; font-size: 20px; }
+    .tiers-section { background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    .tiers-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .tiers-header span { color: #888; font-size: 13px; }
+    .price-type-hint { padding: 8px 12px; background: #111; border-radius: 6px; color: #666; font-size: 12px; margin-bottom: 12px; border: 1px solid #222; }
+    .table-cell { padding: 10px 8px; }
+    .table-cell-actions { padding: 10px 8px; white-space: nowrap; }
+    .action-btn { border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; border: 1px solid #444; display: inline-block; }
+</style>
+
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
     <h1>🏷 Товары и форматы</h1>
-    <button onclick="document.getElementById('addModal').style.display='flex'" class="btn btn-primary" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+    <button onclick="document.getElementById('addModal').style.display='flex'" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
         ➕ Добавить товар
     </button>
 </div>
@@ -17,8 +43,8 @@
 {% endif %}
 
 <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 24px; color: #888; font-size: 13px;">
-    💡 <b>Иерархия:</b> Товары верхнего уровня с дочерними — это категории (Полароид → Вертикальный, Горизонтальный).
-    Товары без дочерних — самостоятельные (Большие, Альбом). Ценовая группа объединяет товары для подсчёта тиров.
+    💡 <b>Категория</b> = товар верхнего уровня с вариантами (напр. Полароид → Вертикальный, Горизонтальный).
+    <b>Ценовая группа</b> — товары в одной группе суммируются для скидки от количества.
 </div>
 
 <!-- Таблица товаров -->
@@ -26,92 +52,89 @@
 <table style="width: 100%; border-collapse: collapse;">
     <thead>
         <tr style="border-bottom: 2px solid #333; color: #888; font-size: 13px; text-align: left;">
-            <th style="padding: 10px 8px;">Название</th>
-            <th style="padding: 10px 8px;">Slug</th>
-            <th style="padding: 10px 8px;">Цена</th>
-            <th style="padding: 10px 8px;">Тип</th>
-            <th style="padding: 10px 8px;">Группа</th>
-            <th style="padding: 10px 8px;">Порядок</th>
-            <th style="padding: 10px 8px;">Статус</th>
-            <th style="padding: 10px 8px;">Действия</th>
+            <th class="table-cell">Название</th>
+            <th class="table-cell">Цена</th>
+            <th class="table-cell">Скидка от кол-ва</th>
+            <th class="table-cell">Группа</th>
+            <th class="table-cell">Статус</th>
+            <th class="table-cell">Действия</th>
         </tr>
     </thead>
     <tbody>
         {% for product in products %}
         <tr style="border-bottom: 1px solid #222; background: {% if not product.is_active %}#1a1a1a{% else %}transparent{% endif %};">
-            <td style="padding: 10px 8px; font-weight: 600;">
+            <td class="table-cell" style="font-weight: 600;">
                 {{ product.emoji }} {{ product.name }}
                 {% if children_map.get(product.id) %}
-                    <span style="color: #888; font-size: 12px;">(категория)</span>
+                    <span style="color: #666; font-size: 11px; display: block;">категория</span>
                 {% endif %}
             </td>
-            <td style="padding: 10px 8px; color: #888; font-family: monospace; font-size: 12px;">{{ product.slug }}</td>
-            <td style="padding: 10px 8px;">
+            <td class="table-cell">
                 {% if product.price_per_unit > 0 %}
-                    {{ product.price_per_unit }}₽
+                    <b>{{ product.price_per_unit }}₽</b>/шт
+                {% else %}
+                    <span style="color: #666;">—</span>
+                {% endif %}
+            </td>
+            <td class="table-cell" style="font-size: 12px; color: #888;">
+                {% if product.price_tiers %}
+                    {% for tier in product.get_price_tiers() %}
+                        от {{ tier.min_qty }} шт → {{ tier.price }}₽{% if not loop.last %}, {% endif %}
+                    {% endfor %}
                 {% else %}
                     —
                 {% endif %}
             </td>
-            <td style="padding: 10px 8px; color: #888; font-size: 12px;">{{ product.price_type }}</td>
-            <td style="padding: 10px 8px; color: #888; font-size: 12px;">{{ product.pricing_group or '—' }}</td>
-            <td style="padding: 10px 8px; color: #888;">{{ product.sort_order }}</td>
-            <td style="padding: 10px 8px;">
+            <td class="table-cell" style="color: #888; font-size: 12px;">{{ product.pricing_group or '—' }}</td>
+            <td class="table-cell">
                 {% if product.is_active %}
                     <span style="color: #4CAF50;">✅ Вкл</span>
                 {% else %}
                     <span style="color: #f44336;">❌ Выкл</span>
                 {% endif %}
             </td>
-            <td style="padding: 10px 8px; white-space: nowrap;">
-                <button onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.short_name }}', '{{ product.emoji }}', '{{ product.description or '' }}', {{ product.price_per_unit }}, '{{ product.price_type }}', '{{ product.price_tiers or '' }}', '{{ product.pricing_group or '' }}', {{ product.aspect_ratio or 'null' }}, {{ product.sort_order }})" style="background: #1a3a5e; color: #4da6ff; border: 1px solid #2a4a7e; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                    ✏️
-                </button>
+            <td class="table-cell-actions">
+                <button onclick='openEditModal({{ product.id }}, {{ product | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
                 <form method="POST" action="/products/{{ product.id }}/toggle" style="display: inline;">
-                    <button type="submit" style="background: {% if product.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if product.is_active %}#ff9800{% else %}#4CAF50{% endif %}; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                    <button type="submit" class="action-btn" style="background: {% if product.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if product.is_active %}#ff9800{% else %}#4CAF50{% endif %};">
                         {% if product.is_active %}⏸{% else %}▶️{% endif %}
                     </button>
                 </form>
-                <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить товар?');">
-                    <button type="submit" style="background: #3a1a1a; color: #f44336; border: 1px solid #5a2a2a; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                        🗑
-                    </button>
+                <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить «{{ product.name }}» и все варианты?');">
+                    <button type="submit" class="action-btn" style="background: #3a1a1a; color: #f44336; border-color: #5a2a2a;">🗑</button>
                 </form>
             </td>
         </tr>
         
-        <!-- Дочерние товары -->
         {% if children_map.get(product.id) %}
             {% for child in children_map[product.id] %}
             <tr style="border-bottom: 1px solid #1a1a1a; background: {% if not child.is_active %}#1a1a1a{% else %}#111{% endif %};">
-                <td style="padding: 10px 8px 10px 32px; color: #ccc;">
+                <td class="table-cell" style="padding-left: 32px; color: #ccc;">
                     └ {{ child.emoji }} {{ child.name }}
                 </td>
-                <td style="padding: 10px 8px; color: #666; font-family: monospace; font-size: 12px;">{{ child.slug }}</td>
-                <td style="padding: 10px 8px;">{{ child.price_per_unit }}₽</td>
-                <td style="padding: 10px 8px; color: #666; font-size: 12px;">{{ child.price_type }}</td>
-                <td style="padding: 10px 8px; color: #666; font-size: 12px;">{{ child.pricing_group or '—' }}</td>
-                <td style="padding: 10px 8px; color: #666;">{{ child.sort_order }}</td>
-                <td style="padding: 10px 8px;">
-                    {% if child.is_active %}
-                        <span style="color: #4CAF50;">✅</span>
+                <td class="table-cell"><b>{{ child.price_per_unit }}₽</b>/шт</td>
+                <td class="table-cell" style="font-size: 12px; color: #888;">
+                    {% if child.price_tiers %}
+                        {% for tier in child.get_price_tiers() %}
+                            от {{ tier.min_qty }} шт → {{ tier.price }}₽{% if not loop.last %}, {% endif %}
+                        {% endfor %}
                     {% else %}
-                        <span style="color: #f44336;">❌</span>
+                        —
                     {% endif %}
                 </td>
-                <td style="padding: 10px 8px; white-space: nowrap;">
-                    <button onclick="editProduct({{ child.id }}, '{{ child.name }}', '{{ child.short_name }}', '{{ child.emoji }}', '{{ child.description or '' }}', {{ child.price_per_unit }}, '{{ child.price_type }}', '{{ child.price_tiers or '' }}', '{{ child.pricing_group or '' }}', {{ child.aspect_ratio or 'null' }}, {{ child.sort_order }})" style="background: #1a3a5e; color: #4da6ff; border: 1px solid #2a4a7e; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                        ✏️
-                    </button>
+                <td class="table-cell" style="color: #666; font-size: 12px;">{{ child.pricing_group or '—' }}</td>
+                <td class="table-cell">
+                    {% if child.is_active %}<span style="color: #4CAF50;">✅</span>{% else %}<span style="color: #f44336;">❌</span>{% endif %}
+                </td>
+                <td class="table-cell-actions">
+                    <button onclick='openEditModal({{ child.id }}, {{ child | tojson }})' class="action-btn" style="background: #1a3a5e; color: #4da6ff; border-color: #2a4a7e;">✏️</button>
                     <form method="POST" action="/products/{{ child.id }}/toggle" style="display: inline;">
-                        <button type="submit" style="background: {% if child.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if child.is_active %}#ff9800{% else %}#4CAF50{% endif %}; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                        <button type="submit" class="action-btn" style="background: {% if child.is_active %}#3a3a1a{% else %}#1a3a1a{% endif %}; color: {% if child.is_active %}#ff9800{% else %}#4CAF50{% endif %};">
                             {% if child.is_active %}⏸{% else %}▶️{% endif %}
                         </button>
                     </form>
-                    <form method="POST" action="/products/{{ child.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить товар?');">
-                        <button type="submit" style="background: #3a1a1a; color: #f44336; border: 1px solid #5a2a2a; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                            🗑
-                        </button>
+                    <form method="POST" action="/products/{{ child.id }}/delete" style="display: inline;" onsubmit="return confirm('Удалить «{{ child.name }}»?');">
+                        <button type="submit" class="action-btn" style="background: #3a1a1a; color: #f44336; border-color: #5a2a2a;">🗑</button>
                     </form>
                 </td>
             </tr>
@@ -122,78 +145,95 @@
 </table>
 </div>
 
-<!-- Модалка добавления -->
-<div id="addModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<!-- ===== Модалка добавления ===== -->
+<div id="addModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
             <h2 style="margin: 0;">➕ Новый товар</h2>
-            <button onclick="document.getElementById('addModal').style.display='none'" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;">✕</button>
+            <button onclick="document.getElementById('addModal').style.display='none'" class="modal-close">✕</button>
         </div>
         
-        <form method="POST" action="/products">
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Название</label>
-                <input name="name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="Полароид вертикальный">
+        <form method="POST" action="/products" onsubmit="return prepareForm(this, 'add')">
+            <div class="field-group">
+                <label class="field-label">Название</label>
+                <input name="name" required class="field-input" placeholder="Полароид вертикальный">
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Короткое название</label>
-                <input name="short_name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="Полароид верт.">
+            <div class="field-group">
+                <label class="field-label">Короткое название</label>
+                <input name="short_name" required class="field-input" placeholder="Полароид верт.">
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Slug (уникальный ID)</label>
-                <input name="slug" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="polaroid_vertical">
+            <div class="field-group">
+                <label class="field-label">Slug (уникальный ID)</label>
+                <input name="slug" required class="field-input" placeholder="polaroid_vertical">
             </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Эмодзи</label>
-                    <input name="emoji" value="📷" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Эмодзи</label>
+                    <input name="emoji" value="📷" class="field-input">
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Порядок сортировки</label>
-                    <input name="sort_order" type="number" value="0" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                <div>
+                    <label class="field-label">Порядок сортировки</label>
+                    <input name="sort_order" type="number" value="0" class="field-input">
                 </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Родитель (для вариантов)</label>
-                <select name="parent_id" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+            <div class="field-group">
+                <label class="field-label">Родитель (для вариантов)</label>
+                <select name="parent_id" class="field-select">
                     <option value="0">— Нет (верхний уровень) —</option>
                     {% for p in products %}
                     <option value="{{ p.id }}">{{ p.emoji }} {{ p.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Описание</label>
-                <textarea name="description" rows="2" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;"></textarea>
+            <div class="field-group">
+                <label class="field-label">Описание</label>
+                <textarea name="description" rows="2" class="field-input"></textarea>
             </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Цена за шт.</label>
-                    <input name="price_per_unit" type="number" value="0" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Базовая цена за шт. (₽)</label>
+                    <input name="price_per_unit" type="number" value="0" class="field-input">
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тип цены</label>
-                    <select name="price_type" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+                <div>
+                    <label class="field-label">Тип цены</label>
+                    <select name="price_type" class="field-select" onchange="toggleTiers(this, 'add')">
                         <option value="per_unit">За штуку</option>
-                        <option value="tiered">Тиры (скидка от количества)</option>
+                        <option value="tiered">Со скидкой от количества</option>
                         <option value="fixed">Фиксированная</option>
                     </select>
                 </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тиры цен (JSON)</label>
-                <input name="price_tiers_json" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder='[{"min_qty": 50, "price": 19}]'>
-                <div style="color: #666; font-size: 11px; margin-top: 2px;">Пример: [{"min_qty": 50, "price": 19}]</div>
-            </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Ценовая группа</label>
-                    <input name="pricing_group" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="polaroid">
-                    <div style="color: #666; font-size: 11px; margin-top: 2px;">Товары в одной группе суммируются для тиров</div>
+
+            <!-- Визуальный редактор тиров -->
+            <div id="add_tiers_section" class="tiers-section" style="display: none;">
+                <div class="tiers-header">
+                    <span>📊 Скидки от количества</span>
+                    <button type="button" class="tier-btn tier-btn-add" onclick="addTierRow('add')">+ Добавить</button>
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Aspect ratio (Ш/В)</label>
-                    <input name="aspect_ratio" type="number" step="0.001" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;" placeholder="0.76">
+                <div id="add_tiers_list">
+                    <div class="tier-row">
+                        <span style="color: #888; font-size: 12px; white-space: nowrap;">от</span>
+                        <input type="number" placeholder="50" class="tier-qty" min="1">
+                        <span style="color: #888; font-size: 12px; white-space: nowrap;">шт →</span>
+                        <input type="number" placeholder="19" class="tier-price" min="1">
+                        <span style="color: #888; font-size: 12px;">₽</span>
+                        <button type="button" class="tier-btn tier-btn-del" onclick="this.closest('.tier-row').remove()">✕</button>
+                    </div>
+                </div>
+                <div class="field-hint">Клиент получит скидку, когда общее количество в группе достигнет порога</div>
+            </div>
+            <input type="hidden" name="price_tiers_json" id="add_tiers_json">
+
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Ценовая группа</label>
+                    <input name="pricing_group" class="field-input" placeholder="polaroid">
+                    <div class="field-hint">Товары в одной группе суммируются для скидки</div>
+                </div>
+                <div>
+                    <label class="field-label">Aspect ratio (Ш/В)</label>
+                    <input name="aspect_ratio" type="number" step="0.001" class="field-input" placeholder="0.76">
+                    <div class="field-hint">Для кадрирования фото</div>
                 </div>
             </div>
             <button type="submit" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
@@ -203,63 +243,72 @@
     </div>
 </div>
 
-<!-- Модалка редактирования -->
-<div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<!-- ===== Модалка редактирования ===== -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
             <h2 style="margin: 0;">✏️ Редактировать товар</h2>
-            <button onclick="document.getElementById('editModal').style.display='none'" style="background: none; border: none; color: #888; cursor: pointer; font-size: 20px;">✕</button>
+            <button onclick="document.getElementById('editModal').style.display='none'" class="modal-close">✕</button>
         </div>
         
-        <form id="editForm" method="POST" action="">
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Название</label>
-                <input id="edit_name" name="name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+        <form id="editForm" method="POST" action="" onsubmit="return prepareForm(this, 'edit')">
+            <div class="field-group">
+                <label class="field-label">Название</label>
+                <input id="edit_name" name="name" required class="field-input">
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Короткое название</label>
-                <input id="edit_short_name" name="short_name" required style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            <div class="field-group">
+                <label class="field-label">Короткое название</label>
+                <input id="edit_short_name" name="short_name" required class="field-input">
             </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Эмодзи</label>
-                    <input id="edit_emoji" name="emoji" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Эмодзи</label>
+                    <input id="edit_emoji" name="emoji" class="field-input">
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Порядок</label>
-                    <input id="edit_sort_order" name="sort_order" type="number" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                <div>
+                    <label class="field-label">Порядок</label>
+                    <input id="edit_sort_order" name="sort_order" type="number" class="field-input">
                 </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Описание</label>
-                <textarea id="edit_description" name="description" rows="2" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;"></textarea>
+            <div class="field-group">
+                <label class="field-label">Описание</label>
+                <textarea id="edit_description" name="description" rows="2" class="field-input"></textarea>
             </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Цена за шт.</label>
-                    <input id="edit_price" name="price_per_unit" type="number" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Базовая цена за шт. (₽)</label>
+                    <input id="edit_price" name="price_per_unit" type="number" class="field-input">
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тип цены</label>
-                    <select id="edit_price_type" name="price_type" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee;">
+                <div>
+                    <label class="field-label">Тип цены</label>
+                    <select id="edit_price_type" name="price_type" class="field-select" onchange="toggleTiers(this, 'edit')">
                         <option value="per_unit">За штуку</option>
-                        <option value="tiered">Тиры</option>
+                        <option value="tiered">Со скидкой от количества</option>
                         <option value="fixed">Фиксированная</option>
                     </select>
                 </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Тиры цен (JSON)</label>
-                <input id="edit_tiers" name="price_tiers_json" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
-            </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Ценовая группа</label>
-                    <input id="edit_group" name="pricing_group" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+
+            <!-- Визуальный редактор тиров -->
+            <div id="edit_tiers_section" class="tiers-section" style="display: none;">
+                <div class="tiers-header">
+                    <span>📊 Скидки от количества</span>
+                    <button type="button" class="tier-btn tier-btn-add" onclick="addTierRow('edit')">+ Добавить</button>
                 </div>
-                <div style="flex: 1;">
-                    <label style="display: block; color: #888; font-size: 13px; margin-bottom: 4px;">Aspect ratio</label>
-                    <input id="edit_ratio" name="aspect_ratio" type="number" step="0.001" style="width: 100%; padding: 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #eee; box-sizing: border-box;">
+                <div id="edit_tiers_list"></div>
+                <div class="field-hint">Клиент получит скидку, когда общее количество в группе достигнет порога</div>
+            </div>
+            <input type="hidden" name="price_tiers_json" id="edit_tiers_json">
+
+            <div class="field-row">
+                <div>
+                    <label class="field-label">Ценовая группа</label>
+                    <input id="edit_group" name="pricing_group" class="field-input">
+                    <div class="field-hint">Товары в одной группе суммируются для скидки</div>
+                </div>
+                <div>
+                    <label class="field-label">Aspect ratio</label>
+                    <input id="edit_ratio" name="aspect_ratio" type="number" step="0.001" class="field-input">
                 </div>
             </div>
             <button type="submit" style="width: 100%; padding: 12px; background: #4da6ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
@@ -270,20 +319,85 @@
 </div>
 
 <script>
-function editProduct(id, name, shortName, emoji, description, price, priceType, tiers, group, ratio, sortOrder) {
+// Показать/скрыть секцию тиров в зависимости от типа цены
+function toggleTiers(selectEl, prefix) {
+    const section = document.getElementById(prefix + '_tiers_section');
+    section.style.display = selectEl.value === 'tiered' ? 'block' : 'none';
+}
+
+// Добавить строку тира
+function addTierRow(prefix, qty = '', price = '') {
+    const list = document.getElementById(prefix + '_tiers_list');
+    const row = document.createElement('div');
+    row.className = 'tier-row';
+    row.innerHTML = `
+        <span style="color: #888; font-size: 12px; white-space: nowrap;">от</span>
+        <input type="number" placeholder="50" class="tier-qty" min="1" value="${qty}">
+        <span style="color: #888; font-size: 12px; white-space: nowrap;">шт →</span>
+        <input type="number" placeholder="19" class="tier-price" min="1" value="${price}">
+        <span style="color: #888; font-size: 12px;">₽</span>
+        <button type="button" class="tier-btn tier-btn-del" onclick="this.closest('.tier-row').remove()">✕</button>
+    `;
+    list.appendChild(row);
+}
+
+// Собрать тиры в JSON перед отправкой формы
+function prepareForm(form, prefix) {
+    const rows = document.querySelectorAll('#' + prefix + '_tiers_list .tier-row');
+    const tiers = [];
+    rows.forEach(row => {
+        const qty = parseInt(row.querySelector('.tier-qty').value);
+        const price = parseInt(row.querySelector('.tier-price').value);
+        if (qty > 0 && price > 0) {
+            tiers.push({ min_qty: qty, price: price });
+        }
+    });
+    document.getElementById(prefix + '_tiers_json').value = tiers.length > 0 ? JSON.stringify(tiers) : '';
+    return true;
+}
+
+// Открыть модалку редактирования с данными товара
+function openEditModal(id, product) {
     document.getElementById('editForm').action = '/products/' + id + '/update';
-    document.getElementById('edit_name').value = name;
-    document.getElementById('edit_short_name').value = shortName;
-    document.getElementById('edit_emoji').value = emoji;
-    document.getElementById('edit_description').value = description;
-    document.getElementById('edit_price').value = price;
-    document.getElementById('edit_price_type').value = priceType;
-    document.getElementById('edit_tiers').value = tiers;
-    document.getElementById('edit_group').value = group;
-    document.getElementById('edit_ratio').value = ratio || '';
-    document.getElementById('edit_sort_order').value = sortOrder;
+    document.getElementById('edit_name').value = product.name || '';
+    document.getElementById('edit_short_name').value = product.short_name || '';
+    document.getElementById('edit_emoji').value = product.emoji || '📷';
+    document.getElementById('edit_description').value = product.description || '';
+    document.getElementById('edit_price').value = product.price_per_unit || 0;
+    document.getElementById('edit_price_type').value = product.price_type || 'per_unit';
+    document.getElementById('edit_group').value = product.pricing_group || '';
+    document.getElementById('edit_ratio').value = product.aspect_ratio || '';
+    document.getElementById('edit_sort_order').value = product.sort_order || 0;
+    
+    // Тиры
+    const tiersSection = document.getElementById('edit_tiers_section');
+    const tiersList = document.getElementById('edit_tiers_list');
+    tiersList.innerHTML = '';
+    
+    if (product.price_type === 'tiered') {
+        tiersSection.style.display = 'block';
+        let tiers = [];
+        if (product.price_tiers) {
+            try { tiers = JSON.parse(product.price_tiers); } catch(e) {}
+        }
+        if (tiers.length === 0) {
+            addTierRow('edit');
+        } else {
+            tiers.forEach(t => addTierRow('edit', t.min_qty, t.price));
+        }
+    } else {
+        tiersSection.style.display = 'none';
+    }
+    
     document.getElementById('editModal').style.display = 'flex';
 }
+
+// Закрытие модалок по клику на оверлей
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) this.style.display = 'none';
+    });
+});
 </script>
 
 {% endblock %}
