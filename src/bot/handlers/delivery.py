@@ -44,21 +44,40 @@ def validate_phone(phone: str) -> tuple[bool, str]:
     return True, f"+7{digits}"
 
 
-DELIVERY_MESSAGE = """🚚 <b>Выберите способ доставки:</b>
-
-<b>📦 ОЗОН доставка в пункт выдачи</b>
-• Стоимость: 100₽
-• Срок доставки: от 4 дней
-• Необходимо наличие приложения ОЗОН
-
-<b>🚗 Курьером по Москве</b>
-• Служба Достависта
-• Время и стоимость по согласованию
-
-<b>🏠 Самовывоз</b>
-• г. Москва, м. Чертановская
-• Балаклавский пр-т 12к3, подъезд 1
-• Время по согласованию"""
+def get_delivery_message() -> str:
+    """Формирует сообщение с доступными способами доставки из настроек."""
+    lines = ["🚚 <b>Выберите способ доставки:</b>\n"]
+    
+    methods = [
+        (DeliveryType.OZON, "📦", SettingKeys.DELIVERY_OZON_NAME, SettingKeys.DELIVERY_OZON_PRICE, SettingKeys.DELIVERY_OZON_DESCRIPTION),
+        (DeliveryType.COURIER, "🚗", SettingKeys.DELIVERY_COURIER_NAME, SettingKeys.DELIVERY_COURIER_PRICE, SettingKeys.DELIVERY_COURIER_DESCRIPTION),
+        (DeliveryType.PICKUP, "🏠", SettingKeys.DELIVERY_PICKUP_NAME, None, SettingKeys.DELIVERY_PICKUP_DESCRIPTION),
+    ]
+    
+    for dt, emoji, name_key, price_key, desc_key in methods:
+        if not dt.is_enabled:
+            continue
+        
+        name = SettingsService.get(name_key, dt.value)
+        price = SettingsService.get_int(price_key, 0) if price_key else 0
+        desc = SettingsService.get(desc_key, "")
+        
+        price_text = f" — {price}₽" if price > 0 else " — бесплатно" if dt == DeliveryType.PICKUP else ""
+        lines.append(f"<b>{emoji} {name}{price_text}</b>")
+        
+        if dt == DeliveryType.PICKUP:
+            pickup_addr = SettingsService.get(SettingKeys.DELIVERY_PICKUP_ADDRESS, "")
+            if pickup_addr:
+                for addr_line in pickup_addr.split("\n"):
+                    lines.append(f"• {addr_line.strip()}")
+        
+        if desc:
+            for desc_line in desc.split("\n"):
+                lines.append(f"• {desc_line.strip()}")
+        
+        lines.append("")
+    
+    return "\n".join(lines)
 
 
 # ================== ВЫБОР ДОСТАВКИ ==================
@@ -67,7 +86,7 @@ DELIVERY_MESSAGE = """🚚 <b>Выберите способ доставки:</b
 async def select_delivery(callback: CallbackQuery, state: FSMContext):
     """Переход к выбору доставки."""
     await callback.message.edit_text(
-        DELIVERY_MESSAGE,
+        get_delivery_message(),
         reply_markup=get_delivery_keyboard(),
         parse_mode="HTML",
     )
@@ -165,9 +184,11 @@ async def process_ozon_city(message: Message, state: FSMContext):
         
         order = await service.get_order_by_id(order_id)
     
+    ozon_name = SettingsService.get(SettingKeys.DELIVERY_OZON_NAME, "ОЗОН доставка")
+    
     await message.answer(
         f"✅ <b>Данные доставки сохранены</b>\n\n"
-        f"📦 Способ: ОЗОН доставка\n"
+        f"📦 Способ: {ozon_name}\n"
         f"📱 Телефон: {phone}\n"
         f"🏙 Город: {city}\n"
         f"💰 Стоимость доставки: {order.delivery_cost}₽\n\n"
@@ -333,9 +354,11 @@ async def process_courier_datetime(message: Message, state: FSMContext):
         
         order = await service.get_order_by_id(order_id)
     
+    courier_name = SettingsService.get(SettingKeys.DELIVERY_COURIER_NAME, "Курьер")
+    
     await message.answer(
         f"✅ <b>Данные доставки сохранены</b>\n\n"
-        f"🚗 Способ: Курьер по Москве\n"
+        f"🚗 Способ: {courier_name}\n"
         f"📱 Телефон: {phone}\n"
         f"📍 Адрес: {address}\n"
         f"👤 Получатель: {name}\n"
@@ -355,10 +378,12 @@ async def delivery_pickup_start(callback: CallbackQuery, state: FSMContext):
     """Начало ввода данных самовывоза — запрос телефона."""
     await state.update_data(delivery_type="pickup")
     
+    pickup_name = SettingsService.get(SettingKeys.DELIVERY_PICKUP_NAME, "Самовывоз")
+    pickup_addr = SettingsService.get(SettingKeys.DELIVERY_PICKUP_ADDRESS, "")
+    addr_text = f"\n📍 Адрес: {pickup_addr}\n" if pickup_addr else "\n"
+    
     await callback.message.edit_text(
-        "🏠 <b>Самовывоз</b>\n\n"
-        "📍 Адрес: г. Москва, м. Чертановская\n"
-        "Балаклавский пр-т 12к3, подъезд 1\n\n"
+        f"🏠 <b>{pickup_name}</b>\n{addr_text}\n"
         "Шаг 1 из 2: Введите номер телефона для связи\n\n"
         "📱 Формат: +7XXXXXXXXXX",
         reply_markup=get_back_keyboard("back_to_delivery"),
@@ -439,12 +464,14 @@ async def process_pickup_name(message: Message, state: FSMContext):
             address=f"Получатель: {name}",
         )
     
+    pickup_addr = SettingsService.get(SettingKeys.DELIVERY_PICKUP_ADDRESS, "")
+    pickup_name_str = SettingsService.get(SettingKeys.DELIVERY_PICKUP_NAME, "Самовывоз")
+    
     await message.answer(
         f"✅ <b>Данные сохранены</b>\n\n"
-        f"🏠 Способ: Самовывоз\n"
-        f"📍 Адрес: г. Москва, м. Чертановская\n"
-        f"Балаклавский пр-т 12к3, подъезд 1\n"
-        f"📱 Телефон: {phone}\n"
+        f"🏠 Способ: {pickup_name_str}\n"
+        + (f"📍 Адрес: {pickup_addr}\n" if pickup_addr else "")
+        + f"📱 Телефон: {phone}\n"
         f"👤 Имя: {name}\n\n"
         f"После оформления заказа с вами свяжется менеджер для согласования времени.",
         reply_markup=get_delivery_confirm_keyboard(),
@@ -476,7 +503,7 @@ async def delivery_manager(callback: CallbackQuery, state: FSMContext):
 async def back_to_delivery(callback: CallbackQuery, state: FSMContext):
     """Возврат к выбору доставки."""
     await callback.message.edit_text(
-        DELIVERY_MESSAGE,
+        get_delivery_message(),
         reply_markup=get_delivery_keyboard(),
         parse_mode="HTML",
     )

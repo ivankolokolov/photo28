@@ -131,9 +131,22 @@ class SettingKeys:
     CROP_CONFIDENCE_THRESHOLD = "crop_confidence_threshold"  # Порог уверенности для авто-подтверждения
     CROP_SHOW_EDITOR = "crop_show_editor"  # Всегда показывать редактор или только проблемные
     
-    # Доставка
-    DELIVERY_PRICE_CDEK = "delivery_price_cdek"
-    DELIVERY_PRICE_POST = "delivery_price_post"
+    # Доставка — ОЗОН
+    DELIVERY_OZON_ENABLED = "delivery_ozon_enabled"
+    DELIVERY_OZON_PRICE = "delivery_ozon_price"
+    DELIVERY_OZON_NAME = "delivery_ozon_name"
+    DELIVERY_OZON_DESCRIPTION = "delivery_ozon_description"
+    # Доставка — Курьер
+    DELIVERY_COURIER_ENABLED = "delivery_courier_enabled"
+    DELIVERY_COURIER_PRICE = "delivery_courier_price"
+    DELIVERY_COURIER_NAME = "delivery_courier_name"
+    DELIVERY_COURIER_DESCRIPTION = "delivery_courier_description"
+    # Доставка — Самовывоз
+    DELIVERY_PICKUP_ENABLED = "delivery_pickup_enabled"
+    DELIVERY_PICKUP_NAME = "delivery_pickup_name"
+    DELIVERY_PICKUP_ADDRESS = "delivery_pickup_address"
+    DELIVERY_PICKUP_DESCRIPTION = "delivery_pickup_description"
+    # Общее
     FREE_DELIVERY_THRESHOLD = "free_delivery_threshold"
     
     # Контакты
@@ -224,33 +237,126 @@ DEFAULT_SETTINGS = [
         "group": "crop",
         "sort_order": 5,
     },
-    # Доставка
+    # Доставка — ОЗОН
     {
-        "key": SettingKeys.DELIVERY_PRICE_CDEK,
-        "value": "350",
-        "value_type": SettingType.INTEGER,
-        "display_name": "Стоимость доставки СДЭК",
-        "description": "Стоимость доставки через СДЭК в рублях",
-        "group": "delivery",
+        "key": SettingKeys.DELIVERY_OZON_ENABLED,
+        "value": "true",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "ОЗОН доставка",
+        "description": "Включить/выключить доставку через ОЗОН",
+        "group": "delivery_ozon",
         "sort_order": 1,
     },
     {
-        "key": SettingKeys.DELIVERY_PRICE_POST,
-        "value": "250",
+        "key": SettingKeys.DELIVERY_OZON_PRICE,
+        "value": "100",
         "value_type": SettingType.INTEGER,
-        "display_name": "Стоимость доставки Почтой России",
-        "description": "Стоимость доставки Почтой России в рублях",
-        "group": "delivery",
+        "display_name": "Стоимость",
+        "description": "Стоимость доставки ОЗОН в рублях",
+        "group": "delivery_ozon",
         "sort_order": 2,
     },
+    {
+        "key": SettingKeys.DELIVERY_OZON_NAME,
+        "value": "ОЗОН доставка",
+        "value_type": SettingType.STRING,
+        "display_name": "Название",
+        "description": "Название для кнопки в боте",
+        "group": "delivery_ozon",
+        "sort_order": 3,
+    },
+    {
+        "key": SettingKeys.DELIVERY_OZON_DESCRIPTION,
+        "value": "Доставка в пункт выдачи ОЗОН\n• Срок: от 4 дней\n• Необходимо приложение ОЗОН",
+        "value_type": SettingType.TEXT,
+        "display_name": "Описание",
+        "description": "Описание способа доставки (показывается клиенту)",
+        "group": "delivery_ozon",
+        "sort_order": 4,
+    },
+    # Доставка — Курьер
+    {
+        "key": SettingKeys.DELIVERY_COURIER_ENABLED,
+        "value": "true",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "Курьерская доставка",
+        "description": "Включить/выключить курьерскую доставку",
+        "group": "delivery_courier",
+        "sort_order": 1,
+    },
+    {
+        "key": SettingKeys.DELIVERY_COURIER_PRICE,
+        "value": "0",
+        "value_type": SettingType.INTEGER,
+        "display_name": "Стоимость",
+        "description": "Стоимость доставки курьером в рублях (0 = по согласованию)",
+        "group": "delivery_courier",
+        "sort_order": 2,
+    },
+    {
+        "key": SettingKeys.DELIVERY_COURIER_NAME,
+        "value": "Курьером по Москве",
+        "value_type": SettingType.STRING,
+        "display_name": "Название",
+        "description": "Название для кнопки в боте",
+        "group": "delivery_courier",
+        "sort_order": 3,
+    },
+    {
+        "key": SettingKeys.DELIVERY_COURIER_DESCRIPTION,
+        "value": "Служба Достависта\n• Время и стоимость по согласованию",
+        "value_type": SettingType.TEXT,
+        "display_name": "Описание",
+        "description": "Описание способа доставки (показывается клиенту)",
+        "group": "delivery_courier",
+        "sort_order": 4,
+    },
+    # Доставка — Самовывоз
+    {
+        "key": SettingKeys.DELIVERY_PICKUP_ENABLED,
+        "value": "true",
+        "value_type": SettingType.BOOLEAN,
+        "display_name": "Самовывоз",
+        "description": "Включить/выключить самовывоз",
+        "group": "delivery_pickup",
+        "sort_order": 1,
+    },
+    {
+        "key": SettingKeys.DELIVERY_PICKUP_NAME,
+        "value": "Самовывоз",
+        "value_type": SettingType.STRING,
+        "display_name": "Название",
+        "description": "Название для кнопки в боте",
+        "group": "delivery_pickup",
+        "sort_order": 2,
+    },
+    {
+        "key": SettingKeys.DELIVERY_PICKUP_ADDRESS,
+        "value": "г. Москва, м. Чертановская\nБалаклавский пр-т 12к3, подъезд 1",
+        "value_type": SettingType.TEXT,
+        "display_name": "Адрес самовывоза",
+        "description": "Адрес пункта самовывоза (показывается клиенту)",
+        "group": "delivery_pickup",
+        "sort_order": 3,
+    },
+    {
+        "key": SettingKeys.DELIVERY_PICKUP_DESCRIPTION,
+        "value": "Время по согласованию с менеджером",
+        "value_type": SettingType.TEXT,
+        "display_name": "Описание",
+        "description": "Дополнительная информация о самовывозе",
+        "group": "delivery_pickup",
+        "sort_order": 4,
+    },
+    # Общие настройки доставки
     {
         "key": SettingKeys.FREE_DELIVERY_THRESHOLD,
         "value": "0",
         "value_type": SettingType.INTEGER,
         "display_name": "Бесплатная доставка от суммы",
         "description": "Сумма заказа для бесплатной доставки (0 = отключено)",
-        "group": "delivery",
-        "sort_order": 3,
+        "group": "delivery_general",
+        "sort_order": 1,
     },
     # Контакты
     {

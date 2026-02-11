@@ -115,27 +115,39 @@ def get_order_summary_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_delivery_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора доставки."""
+    """Динамическая клавиатура выбора доставки из настроек."""
+    from src.models.order import DeliveryType
+    from src.services.settings_service import SettingsService, SettingKeys
+    
     builder = InlineKeyboardBuilder()
     
-    builder.row(
-        InlineKeyboardButton(
-            text="📦 ОЗОН доставка (100₽)",
-            callback_data="delivery:ozon"
+    delivery_methods = [
+        (DeliveryType.OZON, "📦", SettingKeys.DELIVERY_OZON_PRICE),
+        (DeliveryType.COURIER, "🚗", SettingKeys.DELIVERY_COURIER_PRICE),
+        (DeliveryType.PICKUP, "🏠", None),
+    ]
+    
+    for dt, emoji, price_key in delivery_methods:
+        if not dt.is_enabled:
+            continue
+        
+        name = dt.display_name
+        price = SettingsService.get_int(price_key, 0) if price_key else 0
+        
+        if price > 0:
+            label = f"{emoji} {name} ({price}₽)"
+        elif dt == DeliveryType.PICKUP:
+            label = f"{emoji} {name} (бесплатно)"
+        else:
+            label = f"{emoji} {name}"
+        
+        builder.row(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"delivery:{dt.value}"
+            )
         )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="🚗 Курьером по Москве",
-            callback_data="delivery:courier"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="🏠 Самовывоз (бесплатно)",
-            callback_data="delivery:pickup"
-        )
-    )
+    
     builder.row(
         InlineKeyboardButton(
             text="💬 Связаться с менеджером",
