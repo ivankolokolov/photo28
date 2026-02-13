@@ -14,18 +14,13 @@ from src.config import settings
 router = Router()
 logger = logging.getLogger(__name__)
 
-# URL Mini App на GitHub Pages
-WEBAPP_URL = "https://ivankolokolov.github.io/photo28"
-
-
 def get_crop_webapp_keyboard(order_id: int):
     """Клавиатура с кнопкой открытия Mini App."""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    from urllib.parse import quote
     
-    # Формируем URL с параметрами
-    api_url = settings.admin_url or "http://localhost:8080"
-    webapp_url = f"{WEBAPP_URL}?order_id={order_id}&api_url={quote(api_url)}"
+    # Mini App на том же сервере
+    base_url = settings.admin_url or "https://print28.ru"
+    webapp_url = f"{base_url}/webapp?order_id={order_id}"
     
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
@@ -80,15 +75,12 @@ async def handle_webapp_data(message: Message, state: FSMContext):
         # Сразу показываем меню доставки
         from src.bot.keyboards.main import get_delivery_keyboard
         
+        from src.bot.handlers.delivery import get_delivery_message
+        
         await message.answer(
             f"✅ Кадрирование сохранено!\n"
             f"Обработано фото: {saved_count} шт.\n\n"
-            "📦 <b>Выберите способ доставки:</b>\n\n"
-            "🟠 <b>OZON</b> — до пункта выдачи OZON\n"
-            "🔴 <b>СДЭК</b> — до пункта выдачи СДЭК\n"
-            "📬 <b>Почта России</b> — до почтового отделения\n"
-            "🚗 <b>Курьер по Москве</b> — доставка до двери\n"
-            "🏠 <b>Самовывоз</b> — бесплатно, м. Чертановская",
+            + get_delivery_message(),
             reply_markup=get_delivery_keyboard(),
             parse_mode="HTML"
         )

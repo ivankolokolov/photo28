@@ -24,13 +24,10 @@ from src.models.order import OrderStatus
 # Создаём приложение
 app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None)
 
-# CORS для Mini App (GitHub Pages)
+# CORS (на случай внешних запросов)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://ivankolokolov.github.io",
-        "http://localhost:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -41,7 +38,14 @@ app.add_middleware(SessionMiddleware, secret_key=settings.admin_secret_key)
 
 # Статика и шаблоны
 BASE_DIR = Path(__file__).parent
+PROJECT_DIR = BASE_DIR.parent.parent  # корень проекта
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+# Mini App статика (css, js)
+WEBAPP_DIR = PROJECT_DIR / "docs"
+app.mount("/webapp/css", StaticFiles(directory=WEBAPP_DIR / "css"), name="webapp_css")
+app.mount("/webapp/js", StaticFiles(directory=WEBAPP_DIR / "js"), name="webapp_js")
+
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
@@ -640,6 +644,15 @@ async def delete_product(request: Request, product_id: int):
         await service.delete_product(product_id)
     
     return RedirectResponse("/products", status_code=303)
+
+
+# ============== MINI APP ==============
+
+@app.get("/webapp", response_class=HTMLResponse)
+async def webapp_page():
+    """Отдаёт Mini App (index.html)."""
+    html_path = WEBAPP_DIR / "index.html"
+    return FileResponse(html_path, media_type="text/html")
 
 
 # ============== API ДЛЯ MINI APP ==============

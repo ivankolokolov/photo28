@@ -90,14 +90,14 @@ class PhotoCropperApp {
         if (orderId) {
             try {
                 this.showLoading(true);
-                const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
-                const response = await fetch(`${apiBase}/api/photos/${orderId}`);
+                // API на том же сервере — относительный путь
+                const response = await fetch(`/api/photos/${orderId}`);
                 
                 if (response.ok) {
                     const data = await response.json();
                     this.photos = data.photos.map(p => ({
                         ...p,
-                        url: p.url.startsWith('http') ? p.url : `${apiBase}${p.url}`
+                        url: p.url.startsWith('http') ? p.url : p.url
                     }));
                     this.orderId = data.order_id;
                     this.orderNumber = data.order_number;
@@ -109,18 +109,7 @@ class PhotoCropperApp {
                 this.photos = this.getDemoPhotos();
             }
         } else {
-            if (this.tg?.initDataUnsafe?.start_param) {
-                try {
-                    const data = JSON.parse(atob(this.tg.initDataUnsafe.start_param));
-                    this.photos = data.photos || [];
-                } catch (e) {
-                    console.error('Failed to parse start_param:', e);
-                }
-            }
-            
-            if (this.photos.length === 0) {
-                this.photos = this.getDemoPhotos();
-            }
+            this.photos = this.getDemoPhotos();
         }
         
         this.elements.totalPhotos.textContent = this.photos.length;
@@ -397,10 +386,7 @@ class PhotoCropperApp {
         saveBtn.disabled = true;
         
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const apiBase = urlParams.get('api_url') || 'http://localhost:8080';
-            
-            const response = await fetch(apiBase + '/api/crop/save', {
+            const response = await fetch('/api/crop/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
