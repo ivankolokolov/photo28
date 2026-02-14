@@ -376,11 +376,13 @@ def get_crop_option_keyboard(order_id: int) -> InlineKeyboardMarkup:
     """Клавиатура с опцией кадрирования."""
     from aiogram.types import WebAppInfo
     from src.config import settings
+    import hashlib
     
     builder = InlineKeyboardBuilder()
     
     base_url = settings.admin_url or "https://print28.ru"
-    webapp_url = f"{base_url}/webapp?order_id={order_id}"
+    token = hashlib.sha256(f"{order_id}:{settings.admin_secret_key}".encode()).hexdigest()[:32]
+    webapp_url = f"{base_url}/webapp?order_id={order_id}&token={token}"
     
     builder.row(
         InlineKeyboardButton(

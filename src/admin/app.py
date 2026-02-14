@@ -1,14 +1,17 @@
 """FastAPI приложение для админ-панели."""
 import json
+import time
+import hashlib
+import secrets
 from pathlib import Path
 from typing import Optional
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.config import settings
@@ -24,17 +27,62 @@ from src.models.order import OrderStatus
 # Создаём приложение
 app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None)
 
-# CORS (на случай внешних запросов)
+
+# === Security Middleware: заголовки безопасности ===
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# Сессии для авторизации (secret_key из .env, HTTPS-only cookie)
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    SessionMiddleware,
+    secret_key=settings.admin_secret_key,
+    https_only=True,
+    same_site="lax",
 )
 
-# Сессии для авторизации
-app.add_middleware(SessionMiddleware, secret_key=settings.admin_secret_key)
+
+# === Rate Limiting для логина ===
+
+_login_attempts: dict = defaultdict(list)  # {ip: [timestamp, ...]}
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 минут
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Возвращает True если лимит НЕ превышен."""
+    now = time.time()
+    # Удаляем старые попытки
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_WINDOW_SECONDS]
+    return len(_login_attempts[ip]) < MAX_LOGIN_ATTEMPTS
+
+
+def _record_login_attempt(ip: str):
+    """Записывает попытку логина."""
+    _login_attempts[ip].append(time.time())
+
+
+# === API-токен для Mini App ===
+
+def generate_api_token(order_id: int) -> str:
+    """Генерирует токен для доступа к API заказа."""
+    raw = f"{order_id}:{settings.admin_secret_key}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def verify_api_token(order_id: int, token: str) -> bool:
+    """Проверяет токен доступа к API."""
+    expected = generate_api_token(order_id)
+    return secrets.compare_digest(token, expected)
 
 # Статика и шаблоны
 BASE_DIR = Path(__file__).parent
@@ -84,9 +132,19 @@ async def login_page(request: Request, error: str = None):
 
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Rate limiting
+    if not _check_rate_limit(client_ip):
+        return RedirectResponse("/login?error=rate_limit", status_code=303)
+    
     if username == settings.admin_username and password == settings.admin_password:
         request.session["authenticated"] = True
+        # Очищаем попытки при успешном входе
+        _login_attempts.pop(client_ip, None)
         return RedirectResponse("/", status_code=303)
+    
+    _record_login_attempt(client_ip)
     return RedirectResponse("/login?error=invalid", status_code=303)
 
 
@@ -660,6 +718,9 @@ async def webapp_page():
 @app.get("/api/photos/{order_id}")
 async def get_order_photos_api(order_id: int, token: str = None):
     """API для Mini App: получение фото заказа с данными авто-кропа."""
+    if not token or not verify_api_token(order_id, token):
+        raise HTTPException(status_code=403, detail="Invalid or missing token")
+    
     async with async_session() as session:
         service = OrderService(session)
         order = await service.get_order_by_id(order_id)
@@ -701,8 +762,13 @@ async def get_order_photos_api(order_id: int, token: str = None):
 
 
 @app.get("/api/photo-proxy/{file_id}")
-async def photo_proxy(file_id: str):
+async def photo_proxy(request: Request, file_id: str):
     """Проксирует фото из Telegram для Mini App."""
+    # file_id сам по себе unguessable, но проверяем Referer для доп. защиты
+    referer = request.headers.get("referer", "")
+    admin_url = settings.admin_url or ""
+    if referer and admin_url and not referer.startswith(admin_url):
+        raise HTTPException(status_code=403, detail="Forbidden")
     from aiogram import Bot
     import io
     from fastapi.responses import StreamingResponse
@@ -730,11 +796,15 @@ async def save_crop_data(request: Request):
     
     data = await request.json()
     order_id = data.get("order_id")
+    token = data.get("token", "")
     user_id = data.get("user_id")
     photos = data.get("photos", [])
     
     if not order_id:
         raise HTTPException(status_code=400, detail="order_id is required")
+    
+    if not verify_api_token(order_id, token):
+        raise HTTPException(status_code=403, detail="Invalid or missing token")
     if not photos:
         raise HTTPException(status_code=400, detail="No photos data provided")
     

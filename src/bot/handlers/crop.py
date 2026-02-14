@@ -17,10 +17,12 @@ logger = logging.getLogger(__name__)
 def get_crop_webapp_keyboard(order_id: int):
     """Клавиатура с кнопкой открытия Mini App."""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    import hashlib
     
-    # Mini App на том же сервере
+    # Mini App на том же сервере, с токеном доступа
     base_url = settings.admin_url or "https://print28.ru"
-    webapp_url = f"{base_url}/webapp?order_id={order_id}"
+    token = hashlib.sha256(f"{order_id}:{settings.admin_secret_key}".encode()).hexdigest()[:32]
+    webapp_url = f"{base_url}/webapp?order_id={order_id}&token={token}"
     
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(

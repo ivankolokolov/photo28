@@ -86,12 +86,13 @@ class PhotoCropperApp {
     async loadPhotosData() {
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id');
+        this.apiToken = urlParams.get('token') || '';
         
         if (orderId) {
             try {
                 this.showLoading(true);
-                // API на том же сервере — относительный путь
-                const response = await fetch(`/api/photos/${orderId}`);
+                // API на том же сервере — относительный путь + токен
+                const response = await fetch(`/api/photos/${orderId}?token=${this.apiToken}`);
                 
                 if (response.ok) {
                     const data = await response.json();
@@ -374,6 +375,7 @@ class PhotoCropperApp {
         
         const result = {
             order_id: this.orderId,
+            token: this.apiToken || '',
             user_id: this.tg?.initDataUnsafe?.user?.id || null,
             photos: this.photos.map(photo => ({
                 id: photo.id,

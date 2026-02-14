@@ -14,7 +14,11 @@
         <div class="login-box">
             <h1 class="login-title">📷 Photo28 Admin</h1>
             
-            {% if error %}
+            {% if error == 'rate_limit' %}
+            <div class="error-message">
+                Слишком много попыток. Подождите 5 минут.
+            </div>
+            {% elif error %}
             <div class="error-message">
                 Неверный логин или пароль
             </div>
