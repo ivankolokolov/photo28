@@ -269,8 +269,7 @@ class OrderService:
     async def recalculate_order_cost(self, order: Order) -> Order:
         """Пересчитывает стоимость заказа."""
         photos_by_product = order.photos_by_product()
-        order.photos_cost = PricingService.calculate_total_cost(photos_by_product)
-        
+        order.photos_cost = PricingService.calculate_total_cost(self.studio_id, photos_by_product)
         await self.session.commit()
         await self.session.refresh(order)
         return order
