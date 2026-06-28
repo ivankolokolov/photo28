@@ -8,6 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from src.models.order import Order, OrderStatus, DeliveryType
 from src.models.studio import Studio
 from src.services.delivery_options import delivery_display_name
+from src.services.settings_service import SettingKeys
 from src.config import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -111,15 +112,20 @@ class NotificationService:
         status_messages = {
             OrderStatus.CONFIRMED.value: (
                 f"✅ <b>Заказ #{order.order_number} подтверждён!</b>\n\n"
-                "Мы начинаем работу над вашим заказом."),
+                "Мы начинаем работу над вашим заказом. "
+                "Сообщим, когда фотографии будут готовы к отправке."),
             OrderStatus.PRINTING.value: (
-                f"🖨 <b>Заказ #{order.order_number} в печати!</b>\n\nСкоро будут готовы!"),
+                f"🖨 <b>Заказ #{order.order_number} в печати!</b>\n\n"
+                "Ваши фотографии сейчас печатаются. Скоро будут готовы!"),
             OrderStatus.READY.value: (
                 f"📦 <b>Заказ #{order.order_number} готов!</b>\n\n"
-                "Фотографии распечатаны и готовы к отправке."),
+                "Фотографии распечатаны и готовы к отправке. "
+                "Мы сообщим номер отслеживания после отправки."),
             OrderStatus.SHIPPED.value: self._get_shipped_message(order),
             OrderStatus.DELIVERED.value: (
-                f"🎉 <b>Заказ #{order.order_number} доставлен!</b>\n\nСпасибо за заказ! 📸"),
+                f"🎉 <b>Заказ #{order.order_number} доставлен!</b>\n\n"
+                "Спасибо за заказ! Надеемся, вам понравятся фотографии.\n"
+                "Будем рады видеть вас снова! 📸"),
             OrderStatus.CANCELLED.value: (
                 f"❌ <b>Заказ #{order.order_number} отменён</b>\n\n"
                 f"Если есть вопросы, свяжитесь с менеджером: @{manager}"),
@@ -141,5 +147,8 @@ class NotificationService:
         if order.delivery_type == DeliveryType.COURIER:
             return base + "Курьер свяжется с вами в указанное время."
         if order.delivery_type == DeliveryType.PICKUP:
+            addr = self.settings.get(SettingKeys.DELIVERY_PICKUP_ADDRESS, "")
+            if addr:
+                return base + f"Заказ готов к самовывозу по адресу:\n{addr}"
             return base + "Заказ готов к самовывозу."
         return base + "Скоро вы получите свой заказ!"
