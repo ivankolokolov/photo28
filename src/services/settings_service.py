@@ -7,91 +7,87 @@ from src.models.setting import Setting, SettingType
 
 
 class SettingsService:
-    """Сервис для работы с настройками."""
-    
-    # Кеш настроек (в памяти)
-    _cache: Dict[str, Any] = {}
-    _cache_loaded: bool = False
-    
+    """Сервис настроек с пер-студийным кешем в памяти."""
+
+    # Кеш: {studio_id: {key: typed_value}}
+    _cache: Dict[int, Dict[str, Any]] = {}
+
     def __init__(self, session: AsyncSession):
         self.session = session
-    
-    async def load_cache(self) -> None:
-        """Загружает все настройки в кеш."""
-        query = select(Setting)
+
+    async def load_cache(self, studio_id: int) -> None:
+        """Загружает настройки одной студии в кеш."""
+        query = select(Setting).where(Setting.studio_id == studio_id)
         result = await self.session.execute(query)
         settings = result.scalars().all()
-        
-        SettingsService._cache = {
+        SettingsService._cache[studio_id] = {
             s.key: s.get_typed_value() for s in settings
         }
-        SettingsService._cache_loaded = True
-    
+
     @classmethod
-    def get(cls, key: str, default: Any = None) -> Any:
-        """Получает значение из кеша."""
-        return cls._cache.get(key, default)
-    
+    def get(cls, studio_id: int, key: str, default: Any = None) -> Any:
+        return cls._cache.get(studio_id, {}).get(key, default)
+
     @classmethod
-    def get_int(cls, key: str, default: int = 0) -> int:
-        """Получает целочисленное значение."""
-        value = cls._cache.get(key, default)
+    def get_int(cls, studio_id: int, key: str, default: int = 0) -> int:
+        value = cls.get(studio_id, key, default)
         try:
             return int(value)
         except (ValueError, TypeError):
             return default
-    
+
     @classmethod
-    def get_float(cls, key: str, default: float = 0.0) -> float:
-        """Получает вещественное значение."""
-        value = cls._cache.get(key, default)
+    def get_float(cls, studio_id: int, key: str, default: float = 0.0) -> float:
+        value = cls.get(studio_id, key, default)
         try:
             return float(value)
         except (ValueError, TypeError):
             return default
-    
+
     @classmethod
-    def get_bool(cls, key: str, default: bool = False) -> bool:
-        """Получает булево значение."""
-        value = cls._cache.get(key, default)
+    def get_bool(cls, studio_id: int, key: str, default: bool = False) -> bool:
+        value = cls.get(studio_id, key, default)
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
             return value.lower() in ("true", "1", "yes", "да")
         return bool(value)
-    
+
     @classmethod
-    def invalidate_cache(cls) -> None:
-        """Сбрасывает кеш (вызывать после изменения настроек)."""
-        cls._cache = {}
-        cls._cache_loaded = False
-    
-    async def get_all(self) -> list[Setting]:
-        """Получает все настройки из БД."""
-        query = select(Setting).order_by(Setting.group, Setting.sort_order)
+    def invalidate_cache(cls, studio_id: Optional[int] = None) -> None:
+        if studio_id is None:
+            cls._cache = {}
+        else:
+            cls._cache.pop(studio_id, None)
+
+    async def get_all(self, studio_id: int) -> list[Setting]:
+        query = (
+            select(Setting)
+            .where(Setting.studio_id == studio_id)
+            .order_by(Setting.group, Setting.sort_order)
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())
-    
-    async def get_by_key(self, key: str) -> Optional[Setting]:
-        """Получает настройку по ключу."""
-        query = select(Setting).where(Setting.key == key)
+
+    async def get_by_key(self, studio_id: int, key: str) -> Optional[Setting]:
+        query = select(Setting).where(
+            Setting.studio_id == studio_id, Setting.key == key
+        )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
-    
-    async def set_value(self, key: str, value: Any) -> Setting:
-        """Устанавливает значение настройки."""
-        setting = await self.get_by_key(key)
-        if setting:
-            setting.value = str(value)
-            await self.session.commit()
-            # Обновляем кеш
-            SettingsService._cache[key] = setting.get_typed_value()
-            return setting
-        else:
-            raise ValueError(f"Настройка {key} не найдена")
-    
+
+    async def set_value(self, studio_id: int, key: str, value: Any) -> Setting:
+        setting = await self.get_by_key(studio_id, key)
+        if not setting:
+            raise ValueError(f"Настройка {key} не найдена для студии {studio_id}")
+        setting.value = str(value)
+        await self.session.commit()
+        SettingsService._cache.setdefault(studio_id, {})[key] = setting.get_typed_value()
+        return setting
+
     async def create_setting(
         self,
+        studio_id: int,
         key: str,
         value: str,
         value_type: SettingType = SettingType.STRING,
@@ -100,8 +96,8 @@ class SettingsService:
         group: str = "general",
         sort_order: int = 0,
     ) -> Setting:
-        """Создаёт новую настройку."""
         setting = Setting(
+            studio_id=studio_id,
             key=key,
             value=value,
             value_type=value_type,
@@ -112,8 +108,7 @@ class SettingsService:
         )
         self.session.add(setting)
         await self.session.commit()
-        # Обновляем кеш
-        SettingsService._cache[key] = setting.get_typed_value()
+        SettingsService._cache.setdefault(studio_id, {})[key] = setting.get_typed_value()
         return setting
 
 
