@@ -24,8 +24,10 @@ class FakeBot:
 class FakeMessage:
     """Фейковый Message с async .answer()."""
     def __init__(self, text=None, from_user_id=1, chat_id=1, bot=None,
-                 photo=None, document=None, web_app_data=None, media_group_id=None):
+                 photo=None, document=None, web_app_data=None, media_group_id=None,
+                 caption=None):
         self.text = text
+        self.caption = caption
         self.bot = bot or FakeBot()
         self.from_user = SimpleNamespace(id=from_user_id, username="u", first_name="A", last_name="B", full_name="A B")
         self.chat = SimpleNamespace(id=chat_id, type="private", title=None)
@@ -45,8 +47,20 @@ class FakeMessage:
         self.answers.append(rec)
         self.bot.calls.append(rec)
 
+    async def edit_caption(self, caption, **kw):
+        rec = {"method": "edit_caption", "caption": caption, **kw}
+        self.answers.append(rec)
+        self.bot.calls.append(rec)
+
+    async def edit_media(self, media, **kw):
+        rec = {"method": "edit_media", "media": media, **kw}
+        self.answers.append(rec)
+        self.bot.calls.append(rec)
+
     async def delete(self):
-        self.bot.calls.append({"method": "delete"})
+        rec = {"method": "delete"}
+        self.answers.append(rec)
+        self.bot.calls.append(rec)
 
 
 class FakeCallbackQuery:

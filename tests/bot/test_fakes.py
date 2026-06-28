@@ -21,6 +21,18 @@ async def test_fake_callback_answer():
 
 
 @pytest.mark.asyncio
+async def test_fake_message_edit_caption_and_media():
+    msg = FakeMessage(caption="старая подпись")
+    assert msg.caption == "старая подпись"
+    await msg.edit_caption("новая", parse_mode="HTML")
+    assert msg.bot.calls[-1]["method"] == "edit_caption"
+    await msg.edit_media("media_obj")
+    assert msg.bot.calls[-1]["method"] == "edit_media"
+    await msg.delete()
+    assert msg.answers[-1]["method"] == "delete"
+
+
+@pytest.mark.asyncio
 async def test_make_state_roundtrip():
     state = make_state()
     await state.update_data(order_id=5)
