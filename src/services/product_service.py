@@ -1,5 +1,4 @@
-"""Сервис управления товарами/форматами."""
-import json
+"""Сервис управления товарами/форматами (пер-студийный кеш)."""
 import logging
 from typing import Dict, List, Optional
 
@@ -13,66 +12,53 @@ logger = logging.getLogger(__name__)
 
 
 class ProductService:
-    """Сервис для работы с товарами/форматами.
-    
-    Использует кеш на уровне класса — продукты загружаются при старте
-    и обновляются при изменениях через админку.
-    """
-    
-    _products: Dict[int, Product] = {}
-    _top_level: List[Product] = []
-    _cache_loaded: bool = False
-    
+    """Кеш товаров на уровне класса, ключённый по studio_id."""
+
+    # {studio_id: {product_id: Product}}
+    _products: Dict[int, Dict[int, Product]] = {}
+    # {studio_id: [Product, ...]} — верхний уровень
+    _top_level: Dict[int, List[Product]] = {}
+
     def __init__(self, session: AsyncSession):
         self.session = session
-    
-    async def load_cache(self) -> None:
-        """Загружает все продукты в кеш."""
+
+    async def load_cache(self, studio_id: int) -> None:
         query = (
             select(Product)
-            .options(
-                selectinload(Product.children),
-                selectinload(Product.parent),
-            )
+            .where(Product.studio_id == studio_id)
+            .options(selectinload(Product.children), selectinload(Product.parent))
             .order_by(Product.sort_order)
         )
         result = await self.session.execute(query)
         products = result.scalars().unique().all()
-        
-        ProductService._products = {p.id: p for p in products}
-        ProductService._top_level = [
-            p for p in products
-            if p.parent_id is None and p.is_active
+        ProductService._products[studio_id] = {p.id: p for p in products}
+        ProductService._top_level[studio_id] = [
+            p for p in products if p.parent_id is None and p.is_active
         ]
-        ProductService._cache_loaded = True
-        logger.info(f"Загружено {len(products)} товаров в кеш")
-    
+        logger.info(f"Студия {studio_id}: загружено {len(products)} товаров")
+
     @classmethod
-    def get_product(cls, product_id: int) -> Optional[Product]:
-        """Получает продукт из кеша."""
-        return cls._products.get(product_id)
-    
+    def get_product(cls, studio_id: int, product_id: int) -> Optional[Product]:
+        return cls._products.get(studio_id, {}).get(product_id)
+
     @classmethod
-    def get_top_level_products(cls) -> List[Product]:
-        """Возвращает активные продукты верхнего уровня (для клавиатуры бота)."""
-        return [p for p in cls._top_level if p.is_active]
-    
+    def get_top_level_products(cls, studio_id: int) -> List[Product]:
+        return [p for p in cls._top_level.get(studio_id, []) if p.is_active]
+
     @classmethod
-    def get_active_children(cls, parent_id: int) -> List[Product]:
-        """Возвращает активные дочерние продукты."""
-        parent = cls._products.get(parent_id)
+    def get_active_children(cls, studio_id: int, parent_id: int) -> List[Product]:
+        parent = cls._products.get(studio_id, {}).get(parent_id)
         if not parent:
             return []
         return sorted(
             [c for c in parent.children if c.is_active],
-            key=lambda x: x.sort_order
+            key=lambda x: x.sort_order,
         )
-    
+
     @classmethod
-    def get_all_purchasable(cls) -> List[Product]:
-        """Возвращает все товары, которые можно купить (не категории)."""
+    def get_all_purchasable(cls, studio_id: int) -> List[Product]:
         result = []
-        for p in cls._top_level:
+        for p in cls._top_level.get(studio_id, []):
             if not p.is_active:
                 continue
             children = [c for c in p.children if c.is_active]
@@ -81,35 +67,29 @@ class ProductService:
             else:
                 result.append(p)
         return result
-    
+
     @classmethod
-    def is_cache_loaded(cls) -> bool:
-        return cls._cache_loaded
-    
-    @classmethod
-    def invalidate_cache(cls):
-        """Сбрасывает кеш."""
-        cls._products.clear()
-        cls._top_level.clear()
-        cls._cache_loaded = False
-    
-    # === CRUD операции ===
-    
-    async def get_all_products(self) -> List[Product]:
-        """Получает все продукты из БД."""
+    def invalidate_cache(cls, studio_id: Optional[int] = None):
+        if studio_id is None:
+            cls._products.clear()
+            cls._top_level.clear()
+        else:
+            cls._products.pop(studio_id, None)
+            cls._top_level.pop(studio_id, None)
+
+    # === CRUD ===
+
+    async def get_all_products(self, studio_id: int) -> List[Product]:
         query = (
             select(Product)
-            .options(
-                selectinload(Product.children),
-                selectinload(Product.parent),
-            )
+            .where(Product.studio_id == studio_id)
+            .options(selectinload(Product.children), selectinload(Product.parent))
             .order_by(Product.sort_order)
         )
         result = await self.session.execute(query)
         return list(result.scalars().unique().all())
-    
+
     async def get_product_by_id(self, product_id: int) -> Optional[Product]:
-        """Получает продукт по ID из БД."""
         query = (
             select(Product)
             .where(Product.id == product_id)
@@ -117,50 +97,43 @@ class ProductService:
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
-    
-    async def create_product(self, **kwargs) -> Product:
-        """Создаёт новый продукт."""
-        product = Product(**kwargs)
+
+    async def create_product(self, studio_id: int, **kwargs) -> Product:
+        product = Product(studio_id=studio_id, **kwargs)
         self.session.add(product)
         await self.session.commit()
         await self.session.refresh(product)
-        await self.load_cache()
+        await self.load_cache(studio_id)
         return product
-    
+
     async def update_product(self, product_id: int, **kwargs) -> Optional[Product]:
-        """Обновляет продукт."""
         product = await self.get_product_by_id(product_id)
         if not product:
             return None
-        
         for key, value in kwargs.items():
             if hasattr(product, key):
                 setattr(product, key, value)
-        
         await self.session.commit()
         await self.session.refresh(product)
-        await self.load_cache()
+        await self.load_cache(product.studio_id)
         return product
-    
+
     async def delete_product(self, product_id: int) -> bool:
-        """Удаляет продукт."""
         product = await self.get_product_by_id(product_id)
         if not product:
             return False
-        
+        studio_id = product.studio_id
         await self.session.delete(product)
         await self.session.commit()
-        await self.load_cache()
+        await self.load_cache(studio_id)
         return True
-    
+
     async def toggle_product(self, product_id: int) -> Optional[Product]:
-        """Включает/выключает продукт."""
         product = await self.get_product_by_id(product_id)
         if not product:
             return None
-        
         product.is_active = not product.is_active
         await self.session.commit()
         await self.session.refresh(product)
-        await self.load_cache()
+        await self.load_cache(product.studio_id)
         return product
