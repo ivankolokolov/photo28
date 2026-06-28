@@ -23,8 +23,8 @@ class FileService:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
     
     def get_order_dir(self, order: Order) -> Path:
-        """Возвращает директорию для хранения фото заказа."""
-        order_dir = self.photos_dir / order.order_number
+        """Директория фото заказа: storage/{studio_id}/{order_number}/."""
+        order_dir = self.photos_dir / str(order.studio_id) / order.order_number
         order_dir.mkdir(parents=True, exist_ok=True)
         return order_dir
     
@@ -67,7 +67,7 @@ class FileService:
         # Формируем имя файла: order_number_format_position.ext
         # Получаем slug продукта для имени файла
         from src.services.product_service import ProductService
-        product = ProductService.get_product(photo.product_id)
+        product = ProductService.get_product(order.studio_id, photo.product_id)
         product_slug = product.slug if product else f"product{photo.product_id}"
         filename = f"{order.order_number}_{product_slug}_{photo.position:03d}{ext}"
         
@@ -114,7 +114,7 @@ class FileService:
     
     def delete_order_photos(self, order: Order) -> None:
         """Удаляет все локальные фото заказа."""
-        order_dir = self.photos_dir / order.order_number
+        order_dir = self.photos_dir / str(order.studio_id) / order.order_number
         if order_dir.exists():
             import shutil
             shutil.rmtree(order_dir)
