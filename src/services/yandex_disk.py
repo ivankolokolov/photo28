@@ -1,8 +1,13 @@
 """Сервис интеграции с Яндекс.Диском."""
 import asyncio
+import warnings
 from pathlib import Path
 from typing import Optional
-import yadisk_async
+
+# yadisk_async uses deprecated aiohttp subclassing; suppress until dependency is updated.
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    import yadisk_async
 
 from src.config import settings
 from src.models.order import Order

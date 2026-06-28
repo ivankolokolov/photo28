@@ -2,7 +2,7 @@
 from enum import Enum
 from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, Enum as SQLEnum, Text, Float
+from sqlalchemy import String, Integer, ForeignKey, Enum as SQLEnum, Text, Float, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -10,6 +10,7 @@ from src.models.base import Base
 if TYPE_CHECKING:
     from src.models.user import User
     from src.models.photo import Photo
+    from src.models.studio import Studio
 
 
 class OrderStatus(str, Enum):
@@ -82,16 +83,22 @@ class DeliveryType(str, Enum):
 
 
 class Order(Base):
-    """Заказ пользователя."""
-    
+    """Заказ пользователя (в рамках студии)."""
+
     __tablename__ = "orders"
-    
+    __table_args__ = (
+        UniqueConstraint("studio_id", "order_number", name="uq_order_studio_number"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    studio_id: Mapped[int] = mapped_column(
+        ForeignKey("studios.id", ondelete="CASCADE"), index=True, nullable=False
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    
-    # Номер заказа для отображения клиенту
-    order_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
-    
+
+    # Номер заказа для отображения клиенту (уникален в рамках студии)
+    order_number: Mapped[str] = mapped_column(String(20), index=True)
+
     # Статус заказа
     status: Mapped[OrderStatus] = mapped_column(
         SQLEnum(OrderStatus),
@@ -130,6 +137,7 @@ class Order(Base):
     
     # Relationships
     user: Mapped["User"] = relationship(back_populates="orders")
+    studio: Mapped["Studio"] = relationship(lazy="selectin")
     photos: Mapped[List["Photo"]] = relationship(
         back_populates="order",
         lazy="selectin",
