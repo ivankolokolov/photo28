@@ -17,8 +17,9 @@ from src.services.pricing import PricingService
 class OrderService:
     """Сервис для работы с заказами."""
     
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, studio_id: int):
         self.session = session
+        self.studio_id = studio_id
     
     @staticmethod
     def generate_order_number() -> str:
@@ -36,19 +37,23 @@ class OrderService:
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
     ) -> User:
-        """Получает или создаёт пользователя по Telegram ID."""
-        query = select(User).where(User.telegram_id == telegram_id)
+        """Получает или создаёт пользователя в рамках текущей студии."""
+        query = select(User).where(
+            User.studio_id == self.studio_id,
+            User.telegram_id == telegram_id,
+        )
         result = await self.session.execute(query)
         user = result.scalar_one_or_none()
-        
+
         if user:
             user.username = username
             user.first_name = first_name
             user.last_name = last_name
             await self.session.commit()
             return user
-        
+
         user = User(
+            studio_id=self.studio_id,
             telegram_id=telegram_id,
             username=username,
             first_name=first_name,
@@ -62,8 +67,9 @@ class OrderService:
     # === Работа с заказами ===
     
     async def create_order(self, user: User) -> Order:
-        """Создаёт новый заказ-черновик."""
+        """Создаёт новый заказ-черновик в текущей студии."""
         order = Order(
+            studio_id=self.studio_id,
             user_id=user.id,
             order_number=self.generate_order_number(),
             status=OrderStatus.DRAFT,
@@ -75,7 +81,9 @@ class OrderService:
     
     async def get_order_by_id(self, order_id: int) -> Optional[Order]:
         """Получает заказ по ID."""
-        query = select(Order).where(Order.id == order_id).options(
+        query = select(Order).where(
+            Order.studio_id == self.studio_id, Order.id == order_id
+        ).options(
             selectinload(Order.photos),
             selectinload(Order.user),
         )
@@ -84,7 +92,9 @@ class OrderService:
     
     async def get_order_by_number(self, order_number: str) -> Optional[Order]:
         """Получает заказ по номеру."""
-        query = select(Order).where(Order.order_number == order_number).options(
+        query = select(Order).where(
+            Order.studio_id == self.studio_id, Order.order_number == order_number
+        ).options(
             selectinload(Order.photos),
             selectinload(Order.user),
         )
@@ -95,7 +105,7 @@ class OrderService:
         """Получает последний заказ-черновик пользователя."""
         query = (
             select(Order)
-            .where(Order.user_id == user.id, Order.status == OrderStatus.DRAFT)
+            .where(Order.studio_id == self.studio_id, Order.user_id == user.id, Order.status == OrderStatus.DRAFT)
             .options(selectinload(Order.photos))
             .order_by(Order.created_at.desc())
             .limit(1)
@@ -107,7 +117,7 @@ class OrderService:
         """Получает список заказов пользователя."""
         query = (
             select(Order)
-            .where(Order.user_id == user.id, Order.status != OrderStatus.DRAFT)
+            .where(Order.studio_id == self.studio_id, Order.user_id == user.id, Order.status != OrderStatus.DRAFT)
             .options(selectinload(Order.photos))
             .order_by(Order.created_at.desc())
             .limit(limit)
@@ -119,7 +129,7 @@ class OrderService:
         """Получает все заказы с указанным статусом."""
         query = (
             select(Order)
-            .where(Order.status == status)
+            .where(Order.studio_id == self.studio_id, Order.status == status)
             .options(selectinload(Order.photos), selectinload(Order.user))
             .order_by(Order.created_at.desc())
         )
@@ -130,7 +140,7 @@ class OrderService:
         """Получает все заказы (для админки)."""
         query = (
             select(Order)
-            .where(Order.status != OrderStatus.DRAFT)
+            .where(Order.studio_id == self.studio_id, Order.status != OrderStatus.DRAFT)
             .options(selectinload(Order.photos), selectinload(Order.user))
             .order_by(Order.created_at.desc())
             .limit(limit)
@@ -149,8 +159,12 @@ class OrderService:
         offset: int = 0,
     ) -> tuple[List[Order], int]:
         """Поиск и фильтрация заказов с пагинацией."""
-        base_query = select(Order).where(Order.status != OrderStatus.DRAFT)
-        count_query = select(func.count(Order.id)).where(Order.status != OrderStatus.DRAFT)
+        base_query = select(Order).where(
+            Order.studio_id == self.studio_id, Order.status != OrderStatus.DRAFT
+        )
+        count_query = select(func.count(Order.id)).where(
+            Order.studio_id == self.studio_id, Order.status != OrderStatus.DRAFT
+        )
         
         if status:
             base_query = base_query.where(Order.status == status)
@@ -203,15 +217,17 @@ class OrderService:
         cutoff_date = datetime.now() - timedelta(days=days)
         
         count_query = select(func.count(Order.id)).where(
+            Order.studio_id == self.studio_id,
             Order.status == OrderStatus.DRAFT,
-            Order.created_at < cutoff_date
+            Order.created_at < cutoff_date,
         )
         count_result = await self.session.execute(count_query)
         count = count_result.scalar() or 0
-        
+
         delete_query = delete(Order).where(
+            Order.studio_id == self.studio_id,
             Order.status == OrderStatus.DRAFT,
-            Order.created_at < cutoff_date
+            Order.created_at < cutoff_date,
         )
         await self.session.execute(delete_query)
         await self.session.commit()
@@ -347,7 +363,8 @@ class OrderService:
     async def get_promocode(self, code: str) -> Optional[Promocode]:
         """Получает промокод по коду."""
         query = select(Promocode).where(
-            Promocode.code == code.upper().strip()
+            Promocode.studio_id == self.studio_id,
+            Promocode.code == code.upper().strip(),
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -374,6 +391,7 @@ class OrderService:
     ) -> Promocode:
         """Создаёт новый промокод."""
         promocode = Promocode(
+            studio_id=self.studio_id,
             code=code.upper().strip(),
             discount_percent=discount_percent,
             discount_amount=discount_amount,
