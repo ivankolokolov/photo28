@@ -6,6 +6,7 @@ from src.models.photo import Photo
 from src.models.product import Product
 from src.models.promocode import Promocode
 from src.models.setting import Setting, SettingType
+from src.models.studio import Studio
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "Promocode",
     "Setting",
     "SettingType",
+    "Studio",
 ]
