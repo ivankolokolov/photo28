@@ -13,7 +13,7 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def engine():
     eng = create_async_engine(TEST_DATABASE_URL, echo=False)
     yield eng
