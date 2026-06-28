@@ -19,6 +19,8 @@ from src.bot.handlers.manager import router as manager_router
 from src.bot.handlers.crop import router as crop_router
 
 # Базовые роутеры — одинаковы для всех студий.
+# Сейчас возвращают singleton-роутеры; Task 9/план 2b переведут на создание
+# нового Router при каждом вызове.
 BASE_ROUTER_FACTORIES: List[Callable[[], Router]] = [
     lambda: start_router,
     lambda: order_router,
@@ -37,16 +39,15 @@ STUDIO_ROUTER_FACTORIES: Dict[str, List[Callable[[], Router]]] = {}
 def build_dispatcher(studio: Studio) -> Dispatcher:
     """Собирает Dispatcher для студии: базовые роутеры + её доп-роутеры + middleware.
 
-    Базовые роутеры — module-level singletons: включаются в dp только если ещё
-    не прикреплены к другому роутеру (aiogram запрещает двойное parent).
-    Поддержка нескольких параллельных студий (фабрики, создающие новые роутеры)
-    вводится в Task 9.
+    ВНИМАНИЕ: текущие BASE_ROUTER_FACTORIES возвращают singleton-роутеры, поэтому
+    build_dispatcher можно вызвать только ОДИН раз за процесс (одна студия).
+    Повторный вызов бросит aiogram RuntimeError 'router is already attached' —
+    это намеренно, чтобы singleton-ограничение оставалось видимым. Плана 2b
+    переведёт фабрики на создание нового роутера при каждом вызове.
     """
     dp = Dispatcher(storage=MemoryStorage())
     for factory in BASE_ROUTER_FACTORIES:
-        r = factory()
-        if r._parent_router is None:
-            dp.include_router(r)
+        dp.include_router(factory())
     for factory in STUDIO_ROUTER_FACTORIES.get(studio.slug, []):
         dp.include_router(factory())
     mw = StudioMiddleware(studio.id)
