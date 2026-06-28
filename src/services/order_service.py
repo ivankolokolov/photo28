@@ -260,7 +260,9 @@ class OrderService:
         order.delivery_address = address
         order.delivery_phone = phone
         order.delivery_datetime = delivery_datetime
-        order.delivery_cost = delivery_type.delivery_cost
+        from src.bot.context import SettingsFacade
+        from src.services.delivery_options import delivery_cost as _delivery_cost
+        order.delivery_cost = _delivery_cost(SettingsFacade(self.studio_id), delivery_type)
         
         await self.session.commit()
         await self.session.refresh(order)
