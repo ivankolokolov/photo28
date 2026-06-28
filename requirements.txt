@@ -29,3 +29,13 @@ opencv-python-headless==4.9.0.80  # headless версия без GUI
 # For production
 gunicorn==21.2.0
 
+# PostgreSQL driver
+asyncpg==0.29.0
+
+# Secrets & auth
+cryptography==42.0.5
+bcrypt==4.1.2
+
+# Tests
+pytest==8.1.1
+pytest-asyncio==0.23.6
