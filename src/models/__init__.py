@@ -7,6 +7,7 @@ from src.models.product import Product
 from src.models.promocode import Promocode
 from src.models.setting import Setting, SettingType
 from src.models.studio import Studio
+from src.models.admin_user import AdminUser, AdminRole
 
 __all__ = [
     "Base",
@@ -20,4 +21,6 @@ __all__ = [
     "Setting",
     "SettingType",
     "Studio",
+    "AdminUser",
+    "AdminRole",
 ]
