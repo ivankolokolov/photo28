@@ -1,7 +1,7 @@
 """Модель промокода."""
 from typing import Optional
 from datetime import datetime
-from sqlalchemy import String, Integer, Boolean, DateTime
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base
@@ -11,11 +11,17 @@ class Promocode(Base):
     """Промокод для скидки."""
     
     __tablename__ = "promocodes"
-    
+    __table_args__ = (
+        UniqueConstraint("studio_id", "code", name="uq_promocode_studio_code"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    
-    # Код промокода (уникальный, регистронезависимый)
-    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    studio_id: Mapped[int] = mapped_column(
+        ForeignKey("studios.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+
+    # Код промокода (уникален в рамках студии, регистронезависимый)
+    code: Mapped[str] = mapped_column(String(50), index=True)
     
     # Описание промокода
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

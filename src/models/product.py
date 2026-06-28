@@ -1,6 +1,6 @@
 """Модель товара/формата."""
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, Float, ForeignKey, Text, Boolean
+from sqlalchemy import String, Integer, Float, ForeignKey, Text, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -19,17 +19,23 @@ class Product(Base):
     """
     
     __tablename__ = "products"
-    
+    __table_args__ = (
+        UniqueConstraint("studio_id", "slug", name="uq_product_studio_slug"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    
+    studio_id: Mapped[int] = mapped_column(
+        ForeignKey("studios.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+
     # Для двухуровневой навигации
     parent_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=True
     )
-    
-    # Идентификатор (slug)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+
+    # Идентификатор (slug) — уникален в рамках студии
+    slug: Mapped[str] = mapped_column(String(100), index=True)
     
     # Отображение
     name: Mapped[str] = mapped_column(String(255))  # Полное название
