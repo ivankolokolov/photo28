@@ -83,3 +83,13 @@ def make_state(bot_id: int = 100, chat_id: int = 1, user_id: int = 1) -> FSMCont
     storage = MemoryStorage()
     key = StorageKey(bot_id=bot_id, chat_id=chat_id, user_id=user_id)
     return FSMContext(storage=storage, key=key)
+
+
+async def make_ctx(db_session, studio):
+    """Строит реальный StudioContext для тестов хендлеров."""
+    from src.bot.context import build_studio_context
+    from src.services.settings_service import SettingsService
+    from src.services.product_service import ProductService
+    await SettingsService(db_session).load_cache(studio.id)
+    await ProductService(db_session).load_cache(studio.id)
+    return build_studio_context(db_session, studio)
