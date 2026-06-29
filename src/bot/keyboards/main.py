@@ -6,22 +6,32 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from src.models.order import Order
 
 
-def get_format_keyboard() -> InlineKeyboardMarkup:
+def get_format_keyboard(ctx=None) -> InlineKeyboardMarkup:
     """Динамическая клавиатура выбора формата из БД."""
     from src.services.product_service import ProductService
-    
+
     builder = InlineKeyboardBuilder()
-    products = ProductService.get_top_level_products()
-    
+
+    if ctx is not None:
+        products = ctx.products.top_level()
+        def _children(pid):
+            return ctx.products.children(pid)
+    else:
+        # fallback: используется только если ctx не передан (не должно случаться)
+        studio_id = next(iter(ProductService._top_level), None)
+        products = ProductService.get_top_level_products(studio_id) if studio_id is not None else []
+        def _children(pid):
+            return ProductService.get_active_children(studio_id, pid) if studio_id is not None else []
+
     for product in products:
-        children = ProductService.get_active_children(product.id)
+        children = _children(product.id)
         if children:
             # Категория — покажем подменю
             callback = f"format_cat:{product.id}"
         else:
             # Самостоятельный товар — выбираем сразу
             callback = f"format:{product.id}"
-        
+
         # Формируем текст кнопки
         price_hint = ""
         if product.price_per_unit > 0:
@@ -30,23 +40,28 @@ def get_format_keyboard() -> InlineKeyboardMarkup:
             # Для категории показываем цену первого ребёнка
             first = children[0]
             price_hint = f" — {first.display_price}"
-        
+
         builder.row(
             InlineKeyboardButton(
                 text=f"{product.emoji} {product.name}{price_hint}",
                 callback_data=callback,
             )
         )
-    
+
     return builder.as_markup()
 
 
-def get_subcategory_keyboard(parent_id: int) -> InlineKeyboardMarkup:
+def get_subcategory_keyboard(parent_id: int, ctx=None) -> InlineKeyboardMarkup:
     """Клавиатура выбора варианта внутри категории."""
     from src.services.product_service import ProductService
-    
+
     builder = InlineKeyboardBuilder()
-    children = ProductService.get_active_children(parent_id)
+
+    if ctx is not None:
+        children = ctx.products.children(parent_id)
+    else:
+        studio_id = next(iter(ProductService._top_level), None)
+        children = ProductService.get_active_children(studio_id, parent_id) if studio_id is not None else []
     
     for product in children:
         builder.row(
