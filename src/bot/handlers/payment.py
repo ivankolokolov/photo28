@@ -16,7 +16,6 @@ from src.models.order import OrderStatus
 
 logger = logging.getLogger(__name__)
 
-
 async def check_channel_subscription(bot: Bot, user_id: int, ctx) -> bool:
     """Проверяет подписку пользователя на канал из настроек студии."""
     channel = ctx.settings.get(SettingKeys.SUBSCRIPTION_CHANNEL, "")
@@ -29,9 +28,6 @@ async def check_channel_subscription(bot: Bot, user_id: int, ctx) -> bool:
     except Exception as e:
         logger.warning(f"Не удалось проверить подписку на {channel}: {e}")
         return True  # При ошибке пропускаем проверку
-
-router = Router()
-
 
 def format_payment_summary(order, show_promocode_info: bool = True) -> str:
     """Форматирует сводку для оплаты."""
@@ -51,8 +47,6 @@ def format_payment_summary(order, show_promocode_info: bool = True) -> str:
 
     return "\n".join(lines)
 
-
-@router.callback_query(F.data == "go_to_payment")
 async def go_to_payment(callback: CallbackQuery, state: FSMContext, ctx):
     """Переход к оплате."""
     data = await state.get_data()
@@ -77,8 +71,6 @@ async def go_to_payment(callback: CallbackQuery, state: FSMContext, ctx):
 
     await callback.answer()
 
-
-@router.callback_query(F.data == "enter_promocode")
 async def enter_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     """Ввод промокода."""
     await callback.message.edit_text(
@@ -90,8 +82,6 @@ async def enter_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(OrderStates.entering_promocode)
     await callback.answer()
 
-
-@router.message(OrderStates.entering_promocode)
 async def process_promocode(message: Message, state: FSMContext, bot: Bot, ctx):
     """Обработка промокода."""
     if not message.text:
@@ -159,8 +149,6 @@ async def process_promocode(message: Message, state: FSMContext, bot: Bot, ctx):
 
     await state.set_state(OrderStates.selecting_delivery)
 
-
-@router.callback_query(F.data == "skip_promocode")
 async def skip_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     """Пропуск промокода — переход к оплате."""
     data = await state.get_data()
@@ -213,8 +201,6 @@ async def skip_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(OrderStates.waiting_payment_receipt)
     await callback.answer()
 
-
-@router.callback_query(F.data == "back_to_promocode")
 async def back_to_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     """Возврат к промокоду."""
     data = await state.get_data()
@@ -232,8 +218,6 @@ async def back_to_promocode(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(OrderStates.selecting_delivery)
     await callback.answer()
 
-
-@router.message(OrderStates.waiting_payment_receipt, F.photo)
 async def process_payment_receipt_photo(message: Message, state: FSMContext, bot: Bot, ctx):
     """Обработка квитанции об оплате (фото)."""
     data = await state.get_data()
@@ -266,8 +250,6 @@ async def process_payment_receipt_photo(message: Message, state: FSMContext, bot
 
     await state.clear()
 
-
-@router.message(OrderStates.waiting_payment_receipt, F.document)
 async def process_payment_receipt_document(message: Message, state: FSMContext, bot: Bot, ctx):
     """Обработка квитанции об оплате (документ)."""
     data = await state.get_data()
@@ -298,3 +280,14 @@ async def process_payment_receipt_document(message: Message, state: FSMContext, 
     )
 
     await state.clear()
+
+def build_payment_router() -> Router:
+    r = Router(name="payment")
+    r.callback_query.register(go_to_payment, F.data == "go_to_payment")
+    r.callback_query.register(enter_promocode, F.data == "enter_promocode")
+    r.message.register(process_promocode, OrderStates.entering_promocode)
+    r.callback_query.register(skip_promocode, F.data == "skip_promocode")
+    r.callback_query.register(back_to_promocode, F.data == "back_to_promocode")
+    r.message.register(process_payment_receipt_photo, OrderStates.waiting_payment_receipt, F.photo)
+    r.message.register(process_payment_receipt_document, OrderStates.waiting_payment_receipt, F.document)
+    return r
