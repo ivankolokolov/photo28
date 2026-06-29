@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from sqlalchemy import select
 
 from src.models.studio import Studio
 from src.services.crypto import decrypt_secret
@@ -34,6 +35,12 @@ BASE_ROUTER_FACTORIES: List[Callable[[], Router]] = [
 # Доп-роутеры под конкретные студии (ключ — slug). Кастомный экран для студии =
 # добавить сюда фабрику её роутера. По умолчанию пусто.
 STUDIO_ROUTER_FACTORIES: Dict[str, List[Callable[[], Router]]] = {}
+
+
+async def load_active_studios(session) -> list[Studio]:
+    """Возвращает активные студии."""
+    result = await session.execute(select(Studio).where(Studio.is_active.is_(True)))
+    return list(result.scalars().all())
 
 
 def build_dispatcher(studio: Studio) -> Dispatcher:

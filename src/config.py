@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     # Telegram Bot
-    bot_token: str = Field(..., alias="BOT_TOKEN")
+    bot_token: str = Field(default="", alias="BOT_TOKEN")  # legacy; рантайм берёт токены из Studio
 
     # Database
     database_url: str = Field(
