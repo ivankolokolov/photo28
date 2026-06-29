@@ -10,7 +10,6 @@ from src.bot.keyboards import get_main_menu_keyboard
 from src.bot.context import StudioContext
 from src.config import settings
 
-router = Router()
 logger = logging.getLogger(__name__)
 
 def get_crop_webapp_keyboard(order_id: int):
@@ -34,8 +33,6 @@ def get_crop_webapp_keyboard(order_id: int):
         )],
     ])
 
-
-@router.message(F.web_app_data)
 async def handle_webapp_data(message: Message, state: FSMContext, ctx: StudioContext):
     """Обработка данных из Mini App."""
     logger.info(f"=== WEB APP DATA RECEIVED ===")
@@ -93,8 +90,6 @@ async def handle_webapp_data(message: Message, state: FSMContext, ctx: StudioCon
         logger.exception(f"Error handling webapp data: {e}")
         await message.answer(f"❌ Произошла ошибка: {str(e)[:100]}")
 
-
-@router.callback_query(F.data == "skip_crop")
 async def skip_crop(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Пропустить ручное кадрирование, использовать авто-кадр."""
     await callback.answer()
@@ -110,8 +105,6 @@ async def skip_crop(callback: CallbackQuery, state: FSMContext, ctx: StudioConte
 
     await state.set_state(OrderStates.reviewing_order)
 
-
-@router.callback_query(F.data == "open_crop_editor")
 async def open_crop_editor(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Открыть редактор кадрирования."""
     await callback.answer()
@@ -141,7 +134,6 @@ async def open_crop_editor(callback: CallbackQuery, state: FSMContext, bot: Bot,
         reply_markup=get_crop_webapp_keyboard(order_id)
     )
 
-
 async def suggest_crop_after_photos(message: Message, state: FSMContext, order_id: int, photos_count: int):
     """Предложить кадрирование после загрузки всех фото."""
 
@@ -155,3 +147,10 @@ async def suggest_crop_after_photos(message: Message, state: FSMContext, order_i
         f"💡 Если пропустить — будет использовано авто-кадрирование по центру.",
         reply_markup=get_crop_webapp_keyboard(order_id)
     )
+
+def build_crop_router() -> Router:
+    r = Router(name="crop")
+    r.message.register(handle_webapp_data, F.web_app_data)
+    r.callback_query.register(skip_crop, F.data == "skip_crop")
+    r.callback_query.register(open_crop_editor, F.data == "open_crop_editor")
+    return r
