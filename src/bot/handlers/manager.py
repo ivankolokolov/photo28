@@ -7,10 +7,7 @@ from src.models.order import OrderStatus
 from src.bot.context import StudioContext
 
 logger = logging.getLogger(__name__)
-router = Router()
 
-
-@router.callback_query(F.data.startswith("mgr_confirm:"))
 async def manager_confirm_payment(callback: CallbackQuery, bot: Bot, ctx: StudioContext):
     """Менеджер подтверждает оплату заказа."""
     order_id = int(callback.data.split(":")[1])
@@ -63,3 +60,8 @@ async def manager_confirm_payment(callback: CallbackQuery, bot: Bot, ctx: Studio
         logger.warning(f"Не удалось обновить сообщение: {e}")
 
     await callback.answer("✅ Оплата подтверждена, клиент уведомлён!")
+
+def build_manager_router() -> Router:
+    r = Router(name="manager")
+    r.callback_query.register(manager_confirm_payment, F.data.startswith("mgr_confirm:"))
+    return r
