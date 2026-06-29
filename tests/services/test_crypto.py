@@ -12,7 +12,7 @@ def _set_key(monkeypatch):
 
 
 def test_roundtrip():
-    token = "8244811300:AAGnKMaBpdPdnHughXOvggH61XDFqS0RncE"
+    token = "123456789:TEST-FAKE-BOT-TOKEN-not-a-real-secret"
     enc = encrypt_secret(token)
     assert enc != token
     assert decrypt_secret(enc) == token

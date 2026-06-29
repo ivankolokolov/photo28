@@ -35,13 +35,13 @@ class Settings(BaseSettings):
     photos_dir: Path = Field(default=Path("./storage/photos"), alias="PHOTOS_DIR")
     temp_dir: Path = Field(default=Path("./storage/temp"), alias="TEMP_DIR")
 
-    # Manager contact
-    manager_username: str = Field(default="print28photo_zakaz", alias="MANAGER_USERNAME")
+    # Manager contact (значение берётся из .env или записи Studio; дефолт пустой)
+    manager_username: str = Field(default="", alias="MANAGER_USERNAME")
 
-    # Payment details
-    payment_phone: str = Field(default="+79999821473", alias="PAYMENT_PHONE")
-    payment_card: str = Field(default="4377723740716133", alias="PAYMENT_CARD")
-    payment_receiver: str = Field(default="Дарья Р.", alias="PAYMENT_RECEIVER")
+    # Payment details (значения берутся из записи Studio; дефолты пустые, в код не хардкодим)
+    payment_phone: str = Field(default="", alias="PAYMENT_PHONE")
+    payment_card: str = Field(default="", alias="PAYMENT_CARD")
+    payment_receiver: str = Field(default="", alias="PAYMENT_RECEIVER")
 
     # Fernet encryption key for studio secrets
     fernet_key: str = Field(default="", alias="FERNET_KEY")
