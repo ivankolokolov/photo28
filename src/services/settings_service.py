@@ -393,10 +393,10 @@ DEFAULT_SETTINGS = [
     # Бот
     {
         "key": SettingKeys.WELCOME_MESSAGE,
-        "value": "Здравствуйте! 👋\n\nЯ бот приёма заказов <b>Photo28</b>!\n\nКакой формат фотографий вы хотите напечатать?\n\n📷 <b>Форматы:</b>\n{formats}\n\nДля связи с менеджером: @{manager}",
+        "value": "Здравствуйте! 👋\n\nЯ бот приёма заказов <b>{studio_name}</b>!\n\nКакой формат фотографий вы хотите напечатать?\n\n📷 <b>Форматы:</b>\n{formats}\n\nДля связи с менеджером: @{manager}",
         "value_type": SettingType.TEXT,
         "display_name": "Приветственное сообщение",
-        "description": "Шаблон приветствия. Переменные: {formats} — список форматов, {manager} — username менеджера",
+        "description": "Шаблон приветствия. Переменные: {studio_name} — название студии, {formats} — список форматов, {manager} — username менеджера",
         "group": "bot",
         "sort_order": 1,
     },

@@ -47,39 +47,6 @@ class DeliveryType(str, Enum):
     OZON = "ozon"
     COURIER = "courier"
     PICKUP = "pickup"
-    
-    @property
-    def display_name(self) -> str:
-        """Название способа доставки из настроек."""
-        from src.services.settings_service import SettingsService, SettingKeys
-        names = {
-            DeliveryType.OZON: SettingsService.get(SettingKeys.DELIVERY_OZON_NAME, "ОЗОН доставка"),
-            DeliveryType.COURIER: SettingsService.get(SettingKeys.DELIVERY_COURIER_NAME, "Курьер"),
-            DeliveryType.PICKUP: SettingsService.get(SettingKeys.DELIVERY_PICKUP_NAME, "Самовывоз"),
-        }
-        return names[self]
-    
-    @property
-    def delivery_cost(self) -> int:
-        """Стоимость доставки из настроек."""
-        from src.services.settings_service import SettingsService, SettingKeys
-        costs = {
-            DeliveryType.OZON: SettingsService.get_int(SettingKeys.DELIVERY_OZON_PRICE, 100),
-            DeliveryType.COURIER: SettingsService.get_int(SettingKeys.DELIVERY_COURIER_PRICE, 0),
-            DeliveryType.PICKUP: 0,
-        }
-        return costs[self]
-    
-    @property
-    def is_enabled(self) -> bool:
-        """Включён ли способ доставки."""
-        from src.services.settings_service import SettingsService, SettingKeys
-        enabled_keys = {
-            DeliveryType.OZON: SettingKeys.DELIVERY_OZON_ENABLED,
-            DeliveryType.COURIER: SettingKeys.DELIVERY_COURIER_ENABLED,
-            DeliveryType.PICKUP: SettingKeys.DELIVERY_PICKUP_ENABLED,
-        }
-        return SettingsService.get_bool(enabled_keys[self], True)
 
 
 class Order(Base):

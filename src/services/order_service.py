@@ -260,7 +260,9 @@ class OrderService:
         order.delivery_address = address
         order.delivery_phone = phone
         order.delivery_datetime = delivery_datetime
-        order.delivery_cost = delivery_type.delivery_cost
+        from src.bot.context import SettingsFacade
+        from src.services.delivery_options import delivery_cost as _delivery_cost
+        order.delivery_cost = _delivery_cost(SettingsFacade(self.studio_id), delivery_type)
         
         await self.session.commit()
         await self.session.refresh(order)
@@ -269,8 +271,7 @@ class OrderService:
     async def recalculate_order_cost(self, order: Order) -> Order:
         """Пересчитывает стоимость заказа."""
         photos_by_product = order.photos_by_product()
-        order.photos_cost = PricingService.calculate_total_cost(photos_by_product)
-        
+        order.photos_cost = PricingService.calculate_total_cost(self.studio_id, photos_by_product)
         await self.session.commit()
         await self.session.refresh(order)
         return order

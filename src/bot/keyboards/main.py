@@ -1,27 +1,29 @@
 """Основные клавиатуры бота."""
-from typing import List, Optional
+from typing import List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.models.order import Order
 
 
-def get_format_keyboard() -> InlineKeyboardMarkup:
+def get_format_keyboard(ctx) -> InlineKeyboardMarkup:
     """Динамическая клавиатура выбора формата из БД."""
-    from src.services.product_service import ProductService
-    
     builder = InlineKeyboardBuilder()
-    products = ProductService.get_top_level_products()
-    
+
+    products = ctx.products.top_level()
+
+    def _children(pid):
+        return ctx.products.children(pid)
+
     for product in products:
-        children = ProductService.get_active_children(product.id)
+        children = _children(product.id)
         if children:
             # Категория — покажем подменю
             callback = f"format_cat:{product.id}"
         else:
             # Самостоятельный товар — выбираем сразу
             callback = f"format:{product.id}"
-        
+
         # Формируем текст кнопки
         price_hint = ""
         if product.price_per_unit > 0:
@@ -30,24 +32,23 @@ def get_format_keyboard() -> InlineKeyboardMarkup:
             # Для категории показываем цену первого ребёнка
             first = children[0]
             price_hint = f" — {first.display_price}"
-        
+
         builder.row(
             InlineKeyboardButton(
                 text=f"{product.emoji} {product.name}{price_hint}",
                 callback_data=callback,
             )
         )
-    
+
     return builder.as_markup()
 
 
-def get_subcategory_keyboard(parent_id: int) -> InlineKeyboardMarkup:
+def get_subcategory_keyboard(parent_id: int, ctx) -> InlineKeyboardMarkup:
     """Клавиатура выбора варианта внутри категории."""
-    from src.services.product_service import ProductService
-    
     builder = InlineKeyboardBuilder()
-    children = ProductService.get_active_children(parent_id)
-    
+
+    children = ctx.products.children(parent_id)
+
     for product in children:
         builder.row(
             InlineKeyboardButton(
@@ -114,40 +115,40 @@ def get_order_summary_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_delivery_keyboard() -> InlineKeyboardMarkup:
+def get_delivery_keyboard(ctx) -> InlineKeyboardMarkup:
     """Динамическая клавиатура выбора доставки из настроек."""
     from src.models.order import DeliveryType
-    from src.services.settings_service import SettingsService, SettingKeys
-    
+    from src.services.delivery_options import delivery_display_name, delivery_cost, delivery_is_enabled
+
     builder = InlineKeyboardBuilder()
-    
+
     delivery_methods = [
-        (DeliveryType.OZON, "📦", SettingKeys.DELIVERY_OZON_PRICE),
-        (DeliveryType.COURIER, "🚗", SettingKeys.DELIVERY_COURIER_PRICE),
-        (DeliveryType.PICKUP, "🏠", None),
+        (DeliveryType.OZON, "📦"),
+        (DeliveryType.COURIER, "🚗"),
+        (DeliveryType.PICKUP, "🏠"),
     ]
-    
-    for dt, emoji, price_key in delivery_methods:
-        if not dt.is_enabled:
+
+    for dt, emoji in delivery_methods:
+        if not delivery_is_enabled(ctx.settings, dt):
             continue
-        
-        name = dt.display_name
-        price = SettingsService.get_int(price_key, 0) if price_key else 0
-        
+
+        name = delivery_display_name(ctx.settings, dt)
+        price = delivery_cost(ctx.settings, dt)
+
         if price > 0:
             label = f"{emoji} {name} ({price}₽)"
         elif dt == DeliveryType.PICKUP:
             label = f"{emoji} {name} (бесплатно)"
         else:
             label = f"{emoji} {name}"
-        
+
         builder.row(
             InlineKeyboardButton(
                 text=label,
                 callback_data=f"delivery:{dt.value}"
             )
         )
-    
+
     builder.row(
         InlineKeyboardButton(
             text="💬 Связаться с менеджером",
@@ -160,7 +161,7 @@ def get_delivery_keyboard() -> InlineKeyboardMarkup:
             callback_data="back_to_photos"
         )
     )
-    
+
     return builder.as_markup()
 
 
