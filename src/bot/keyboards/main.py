@@ -1,27 +1,19 @@
 """Основные клавиатуры бота."""
-from typing import List, Optional
+from typing import List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.models.order import Order
 
 
-def get_format_keyboard(ctx=None) -> InlineKeyboardMarkup:
+def get_format_keyboard(ctx) -> InlineKeyboardMarkup:
     """Динамическая клавиатура выбора формата из БД."""
-    from src.services.product_service import ProductService
-
     builder = InlineKeyboardBuilder()
 
-    if ctx is not None:
-        products = ctx.products.top_level()
-        def _children(pid):
-            return ctx.products.children(pid)
-    else:
-        # fallback: используется только если ctx не передан (не должно случаться)
-        studio_id = next(iter(ProductService._top_level), None)
-        products = ProductService.get_top_level_products(studio_id) if studio_id is not None else []
-        def _children(pid):
-            return ProductService.get_active_children(studio_id, pid) if studio_id is not None else []
+    products = ctx.products.top_level()
+
+    def _children(pid):
+        return ctx.products.children(pid)
 
     for product in products:
         children = _children(product.id)
@@ -51,18 +43,12 @@ def get_format_keyboard(ctx=None) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_subcategory_keyboard(parent_id: int, ctx=None) -> InlineKeyboardMarkup:
+def get_subcategory_keyboard(parent_id: int, ctx) -> InlineKeyboardMarkup:
     """Клавиатура выбора варианта внутри категории."""
-    from src.services.product_service import ProductService
-
     builder = InlineKeyboardBuilder()
 
-    if ctx is not None:
-        children = ctx.products.children(parent_id)
-    else:
-        studio_id = next(iter(ProductService._top_level), None)
-        children = ProductService.get_active_children(studio_id, parent_id) if studio_id is not None else []
-    
+    children = ctx.products.children(parent_id)
+
     for product in children:
         builder.row(
             InlineKeyboardButton(
@@ -129,7 +115,7 @@ def get_order_summary_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def get_delivery_keyboard(ctx=None) -> InlineKeyboardMarkup:
+def get_delivery_keyboard(ctx) -> InlineKeyboardMarkup:
     """Динамическая клавиатура выбора доставки из настроек."""
     from src.models.order import DeliveryType
     from src.services.delivery_options import delivery_display_name, delivery_cost, delivery_is_enabled
@@ -143,15 +129,11 @@ def get_delivery_keyboard(ctx=None) -> InlineKeyboardMarkup:
     ]
 
     for dt, emoji in delivery_methods:
-        if ctx is not None and not delivery_is_enabled(ctx.settings, dt):
+        if not delivery_is_enabled(ctx.settings, dt):
             continue
 
-        if ctx is not None:
-            name = delivery_display_name(ctx.settings, dt)
-            price = delivery_cost(ctx.settings, dt)
-        else:
-            name = dt.value
-            price = 0
+        name = delivery_display_name(ctx.settings, dt)
+        price = delivery_cost(ctx.settings, dt)
 
         if price > 0:
             label = f"{emoji} {name} ({price}₽)"

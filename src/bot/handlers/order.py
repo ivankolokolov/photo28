@@ -125,7 +125,7 @@ async def select_format_category(callback: CallbackQuery, state: FSMContext, ctx
 
     await callback.message.edit_text(
         text,
-        reply_markup=get_subcategory_keyboard(cat_id),
+        reply_markup=get_subcategory_keyboard(cat_id, ctx),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -136,7 +136,7 @@ async def back_to_formats(callback: CallbackQuery, state: FSMContext, ctx: Studi
     """Возврат к списку форматов."""
     await callback.message.edit_text(
         "Выберите формат фотографий:",
-        reply_markup=get_format_keyboard(),
+        reply_markup=get_format_keyboard(ctx),
     )
     await state.set_state(OrderStates.selecting_format)
     await callback.answer()
@@ -375,7 +375,7 @@ async def add_another_format(callback: CallbackQuery, state: FSMContext, ctx: St
     """Добавить фото другого формата."""
     await callback.message.edit_text(
         "Выберите формат для следующих фотографий:",
-        reply_markup=get_format_keyboard(),
+        reply_markup=get_format_keyboard(ctx),
     )
 
     await state.set_state(OrderStates.selecting_format)
@@ -551,7 +551,7 @@ async def back_to_photos(callback: CallbackQuery, state: FSMContext, ctx: Studio
     else:
         await callback.message.edit_text(
             "Выберите формат фотографий:",
-            reply_markup=get_format_keyboard(),
+            reply_markup=get_format_keyboard(ctx),
         )
         await state.set_state(OrderStates.selecting_format)
 
@@ -738,7 +738,7 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx
         await bot.send_message(
             chat_id=callback.from_user.id,
             text="Все фото удалены. Выберите формат для добавления новых:",
-            reply_markup=get_format_keyboard(),
+            reply_markup=get_format_keyboard(ctx),
         )
         await state.set_state(OrderStates.selecting_format)
     else:
@@ -788,7 +788,7 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot, 
             text=f"⚠️ Минимальный заказ: <b>{min_photos}</b> фото.\n"
                  f"У вас: <b>{order.photos_count}</b>. Нужно ещё: <b>{need_more}</b>\n\n"
                  f"Выберите формат для добавления:",
-            reply_markup=get_format_keyboard(),
+            reply_markup=get_format_keyboard(ctx),
             parse_mode="HTML",
         )
         await state.set_state(OrderStates.selecting_format)
@@ -797,7 +797,7 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot, 
         await bot.send_message(
             chat_id=callback.from_user.id,
             text="Выберите формат фотографий:",
-            reply_markup=get_format_keyboard(),
+            reply_markup=get_format_keyboard(ctx),
         )
         await state.set_state(OrderStates.selecting_format)
 
