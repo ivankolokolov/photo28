@@ -26,6 +26,12 @@ async def main():
 
     bots, tasks = [], []
     for studio in studios:
+        # Пропускаем активную студию без токена, чтобы одна некорректная запись
+        # не уронила старт всех остальных студий.
+        if not studio.bot_token:
+            logger.warning("Студия %s (%s) активна, но без токена бота — пропущена",
+                           studio.slug, studio.id)
+            continue
         bot = build_bot(studio)
         dp = build_dispatcher(studio)
         bots.append(bot)
