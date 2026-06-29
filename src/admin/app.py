@@ -3,6 +3,7 @@ import json
 import time
 import hashlib
 import secrets
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from collections import defaultdict
@@ -24,8 +25,21 @@ from src.services.analytics_service import AnalyticsService
 from src.services.product_service import ProductService
 from src.models.order import OrderStatus
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Загружаем кеши при старте админки."""
+    async with async_session() as session:
+        settings_service = SettingsService(session)
+        await settings_service.load_cache()
+
+        product_service = ProductService(session)
+        await product_service.load_cache()
+    yield
+
+
 # Создаём приложение
-app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None)
+app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 
 # === Security Middleware: заголовки безопасности ===
@@ -97,20 +111,6 @@ app.mount("/webapp/js", StaticFiles(directory=WEBAPP_DIR / "js"), name="webapp_j
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-# === Startup ===
-
-@app.on_event("startup")
-async def startup_event():
-    """Загружаем кеши при старте админки."""
-    async with async_session() as session:
-        # Загружаем настройки
-        settings_service = SettingsService(session)
-        await settings_service.load_cache()
-        
-        # Загружаем товары
-        product_service = ProductService(session)
-        await product_service.load_cache()
-
 
 def check_auth(request: Request) -> bool:
     """Проверяет авторизацию."""
@@ -127,7 +127,7 @@ async def require_auth(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = None):
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"error": error})
 
 
 @app.post("/login")
