@@ -21,6 +21,11 @@ class Studio(Base):
     bot_token: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     bot_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Секрет для пути webhook (/webhook/{webhook_secret}); не равен токену.
+    webhook_secret: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+
     # Группа чеков / менеджер
     manager_chat_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     manager_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

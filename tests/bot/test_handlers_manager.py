@@ -98,3 +98,11 @@ async def test_manager_confirm_payment_non_paid_order_sends_alert(db_session):
     # Алерт отправлен
     assert callback.answered
     assert callback.answer_text is not None
+
+
+def test_build_manager_router_registers_handlers():
+    from src.bot.handlers.manager import build_manager_router
+    from aiogram import Router
+    r = build_manager_router()
+    assert isinstance(r, Router)
+    assert len(r.callback_query.handlers) >= 1

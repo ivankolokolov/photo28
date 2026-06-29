@@ -119,7 +119,12 @@ print('База данных создана!')
 
 ### 5. Запуск
 
-#### Запуск бота
+#### Запуск бота (webhook-режим)
+
+`main.py` запускает aiohttp-сервер на порту `WEBHOOK_PORT` (по умолчанию 8081).
+При старте автоматически выставляются вебхуки для каждой студии из реестра
+через `lifecycle.startup` — вручную вызывать `setWebhook` не нужно.
+
 ```bash
 source venv/bin/activate
 python main.py
@@ -140,7 +145,7 @@ python admin.py
 
 ```ini
 [Unit]
-Description=Photo28 Telegram Bot
+Description=Photo28 Telegram Bot (webhook)
 After=network.target
 
 [Service]
@@ -193,25 +198,54 @@ sudo journalctl -u photo28-admin -f
 sudo systemctl restart photo28-bot
 ```
 
-## 🔒 Безопасность админки (nginx reverse proxy)
+## 🔒 nginx: проксирование webhook и админки
 
-Для защиты админки рекомендуется использовать nginx с базовой авторизацией или SSL:
+Бот работает через webhook: nginx принимает HTTPS-запросы от Telegram и перенаправляет
+их на локальный aiohttp-сервер (`WEBHOOK_PORT`, по умолчанию 8081).
 
 ```nginx
+# Боты (webhook)
 server {
-    listen 80;
+    listen 443 ssl;
+    server_name bots.example.com;
+
+    # SSL-сертификат (например, Let's Encrypt)
+    ssl_certificate     /etc/letsencrypt/live/bots.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bots.example.com/privkey.pem;
+
+    # Telegram шлёт обновления сюда (per-studio URL: /webhook/{secret})
+    location /webhook/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Health-check (используется мониторингом)
+    location /healthz {
+        proxy_pass http://127.0.0.1:8081;
+    }
+}
+
+# Админка
+server {
+    listen 443 ssl;
     server_name admin.yourdomain.com;
-    
+
+    ssl_certificate     /etc/letsencrypt/live/admin.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/admin.yourdomain.com/privkey.pem;
+
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        
-        # Базовая авторизация (дополнительный слой)
-        # auth_basic "Admin Area";
-        # auth_basic_user_file /etc/nginx/.htpasswd;
     }
 }
+```
+
+Обязательные переменные в `.env` для webhook-режима:
+```env
+BASE_WEBHOOK_URL=https://bots.example.com   # публичный URL без trailing slash
+WEBHOOK_PORT=8081                            # порт aiohttp-сервера (localhost)
 ```
 
 ## ☁️ Интеграция с Яндекс.Диском

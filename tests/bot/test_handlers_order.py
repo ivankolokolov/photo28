@@ -57,3 +57,12 @@ async def test_finish_photos_below_min_shows_alert(db_session):
     assert cb.answered
     assert cb.answer_text is not None
     assert "5" in cb.answer_text  # min_photos is 5
+
+
+def test_build_order_router_registers_handlers():
+    from src.bot.handlers.order import build_order_router
+    from aiogram import Router
+    r = build_order_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 6
+    assert len(r.callback_query.handlers) >= 10

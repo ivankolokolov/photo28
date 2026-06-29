@@ -14,9 +14,6 @@ from src.services.settings_service import SettingKeys
 from src.models.order import DeliveryType
 from src.services.delivery_options import delivery_display_name, delivery_cost, delivery_is_enabled
 
-router = Router()
-
-
 def validate_phone(phone: str) -> tuple[bool, str]:
     """Валидация телефона. Возвращает (is_valid, normalized_phone)."""
     # Убираем всё кроме цифр и +
@@ -41,7 +38,6 @@ def validate_phone(phone: str) -> tuple[bool, str]:
         return False, ""
 
     return True, f"+7{digits}"
-
 
 def get_delivery_message(ctx) -> str:
     """Формирует сообщение с доступными способами доставки из настроек студии."""
@@ -78,10 +74,8 @@ def get_delivery_message(ctx) -> str:
 
     return "\n".join(lines)
 
-
 # ================== ВЫБОР ДОСТАВКИ ==================
 
-@router.callback_query(F.data == "select_delivery")
 async def select_delivery(callback: CallbackQuery, state: FSMContext, ctx):
     """Переход к выбору доставки."""
     await callback.message.edit_text(
@@ -93,10 +87,8 @@ async def select_delivery(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(OrderStates.selecting_delivery)
     await callback.answer()
 
-
 # ================== ОЗОН ДОСТАВКА ==================
 
-@router.callback_query(F.data == "delivery:ozon")
 async def delivery_ozon_start(callback: CallbackQuery, state: FSMContext, ctx):
     """Начало ввода данных ОЗОН — запрос телефона."""
     await state.update_data(delivery_type="ozon")
@@ -112,8 +104,6 @@ async def delivery_ozon_start(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(OrderStates.entering_ozon_phone)
     await callback.answer()
 
-
-@router.message(OrderStates.entering_ozon_phone)
 async def process_ozon_phone(message: Message, state: FSMContext, ctx):
     """Обработка телефона для ОЗОН."""
     if not message.text:
@@ -145,8 +135,6 @@ async def process_ozon_phone(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.entering_ozon_city)
 
-
-@router.message(OrderStates.entering_ozon_city)
 async def process_ozon_city(message: Message, state: FSMContext, ctx):
     """Обработка города для ОЗОН."""
     if not message.text:
@@ -196,10 +184,8 @@ async def process_ozon_city(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.selecting_delivery)
 
-
 # ================== КУРЬЕРСКАЯ ДОСТАВКА ==================
 
-@router.callback_query(F.data == "delivery:courier")
 async def delivery_courier_start(callback: CallbackQuery, state: FSMContext, ctx):
     """Начало ввода данных курьера — запрос телефона."""
     await state.update_data(delivery_type="courier")
@@ -215,8 +201,6 @@ async def delivery_courier_start(callback: CallbackQuery, state: FSMContext, ctx
     await state.set_state(OrderStates.entering_courier_phone)
     await callback.answer()
 
-
-@router.message(OrderStates.entering_courier_phone)
 async def process_courier_phone(message: Message, state: FSMContext, ctx):
     """Обработка телефона для курьера."""
     if not message.text:
@@ -248,8 +232,6 @@ async def process_courier_phone(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.entering_courier_address)
 
-
-@router.message(OrderStates.entering_courier_address)
 async def process_courier_address(message: Message, state: FSMContext, ctx):
     """Обработка адреса для курьера."""
     if not message.text:
@@ -277,8 +259,6 @@ async def process_courier_address(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.entering_courier_name)
 
-
-@router.message(OrderStates.entering_courier_name)
 async def process_courier_name(message: Message, state: FSMContext, ctx):
     """Обработка ФИО для курьера."""
     if not message.text:
@@ -308,8 +288,6 @@ async def process_courier_name(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.entering_courier_datetime)
 
-
-@router.message(OrderStates.entering_courier_datetime)
 async def process_courier_datetime(message: Message, state: FSMContext, ctx):
     """Обработка даты/времени для курьера."""
     if not message.text:
@@ -365,10 +343,8 @@ async def process_courier_datetime(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.selecting_delivery)
 
-
 # ================== САМОВЫВОЗ ==================
 
-@router.callback_query(F.data == "delivery:pickup")
 async def delivery_pickup_start(callback: CallbackQuery, state: FSMContext, ctx):
     """Начало ввода данных самовывоза — запрос телефона."""
     await state.update_data(delivery_type="pickup")
@@ -388,8 +364,6 @@ async def delivery_pickup_start(callback: CallbackQuery, state: FSMContext, ctx)
     await state.set_state(OrderStates.entering_pickup_phone)
     await callback.answer()
 
-
-@router.message(OrderStates.entering_pickup_phone)
 async def process_pickup_phone(message: Message, state: FSMContext, ctx):
     """Обработка телефона для самовывоза."""
     if not message.text:
@@ -423,8 +397,6 @@ async def process_pickup_phone(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.entering_pickup_name)
 
-
-@router.message(OrderStates.entering_pickup_name)
 async def process_pickup_name(message: Message, state: FSMContext, ctx):
     """Обработка имени для самовывоза."""
     if not message.text:
@@ -473,10 +445,8 @@ async def process_pickup_name(message: Message, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.selecting_delivery)
 
-
 # ================== СВЯЗЬ С МЕНЕДЖЕРОМ ==================
 
-@router.callback_query(F.data == "delivery:manager")
 async def delivery_manager(callback: CallbackQuery, state: FSMContext, ctx):
     """Связь с менеджером."""
     manager = ctx.studio.manager_username or "manager"
@@ -489,10 +459,8 @@ async def delivery_manager(callback: CallbackQuery, state: FSMContext, ctx):
 
     await callback.answer()
 
-
 # ================== КНОПКА НАЗАД ==================
 
-@router.callback_query(F.data == "back_to_delivery")
 async def back_to_delivery(callback: CallbackQuery, state: FSMContext, ctx):
     """Возврат к выбору доставки."""
     await callback.message.edit_text(
@@ -503,3 +471,21 @@ async def back_to_delivery(callback: CallbackQuery, state: FSMContext, ctx):
 
     await state.set_state(OrderStates.selecting_delivery)
     await callback.answer()
+
+def build_delivery_router() -> Router:
+    r = Router(name="delivery")
+    r.callback_query.register(select_delivery, F.data == "select_delivery")
+    r.callback_query.register(delivery_ozon_start, F.data == "delivery:ozon")
+    r.message.register(process_ozon_phone, OrderStates.entering_ozon_phone)
+    r.message.register(process_ozon_city, OrderStates.entering_ozon_city)
+    r.callback_query.register(delivery_courier_start, F.data == "delivery:courier")
+    r.message.register(process_courier_phone, OrderStates.entering_courier_phone)
+    r.message.register(process_courier_address, OrderStates.entering_courier_address)
+    r.message.register(process_courier_name, OrderStates.entering_courier_name)
+    r.message.register(process_courier_datetime, OrderStates.entering_courier_datetime)
+    r.callback_query.register(delivery_pickup_start, F.data == "delivery:pickup")
+    r.message.register(process_pickup_phone, OrderStates.entering_pickup_phone)
+    r.message.register(process_pickup_name, OrderStates.entering_pickup_name)
+    r.callback_query.register(delivery_manager, F.data == "delivery:manager")
+    r.callback_query.register(back_to_delivery, F.data == "back_to_delivery")
+    return r

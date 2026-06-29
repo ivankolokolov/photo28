@@ -28,3 +28,12 @@ async def test_cmd_start_creates_order_and_greets(db_session):
     assert await ctx.orders.get_user_draft_order(
         await ctx.orders.get_or_create_user(telegram_id=999)) is not None
     assert await state.get_state() == OrderStates.selecting_format.state
+
+
+def test_build_start_router_registers_handlers():
+    from src.bot.handlers.start import build_start_router
+    from aiogram import Router
+    r = build_start_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 4
+    assert len(r.callback_query.handlers) >= 2

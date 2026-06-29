@@ -111,3 +111,12 @@ async def test_process_payment_receipt_photo_saves_receipt_and_notifies_manager(
     user_msgs = [c for c in msg.answers if c.get("method") == "send_message"]
     assert user_msgs, "Ожидалось финальное сообщение клиенту"
     assert "mgr_test" in user_msgs[0]["text"]
+
+
+def test_build_payment_router_registers_handlers():
+    from src.bot.handlers.payment import build_payment_router
+    from aiogram import Router
+    r = build_payment_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 2
+    assert len(r.callback_query.handlers) >= 4

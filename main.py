@@ -1,49 +1,55 @@
-"""Точка входа: polling всех активных студий."""
+"""Точка входа: webhook-сервер всех активных студий."""
 import asyncio
 import logging
+import os
+from aiohttp import web
 
 from src.database import init_db, async_session
-from src.services.settings_service import SettingsService
-from src.services.product_service import ProductService
-from src.bot.registry import load_active_studios, build_bot, build_dispatcher
+from src.bot.registry import StudioBotRegistry, load_active_studios
+from src.bot.webhook_app import build_webhook_app, REGISTRY_KEY
+from src.bot.lifecycle import startup, shutdown
+from src.bot.background import cleanup_old_drafts_once
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 
-async def main():
+# Типизированный ключ для хранения задачи очистки (избегает NotAppKeyWarning)
+CLEANUP_TASK_KEY: web.AppKey["asyncio.Task"] = web.AppKey("cleanup_task", asyncio.Task)
+
+
+async def _cleanup_loop():
+    while True:
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+        try:
+            async with async_session() as session:
+                studios = await load_active_studios(session)
+                await cleanup_old_drafts_once(session, [s.id for s in studios], days=7)
+        except Exception as e:
+            logger.error("Ошибка очистки черновиков: %s", e)
+
+
+async def _on_startup(app: web.Application):
     await init_db()
     async with async_session() as session:
-        studios = await load_active_studios(session)
-        for s in studios:
-            await SettingsService(session).load_cache(s.id)
-            await ProductService(session).load_cache(s.id)
+        await startup(app[REGISTRY_KEY], session)
+    app[CLEANUP_TASK_KEY] = asyncio.create_task(_cleanup_loop())
 
-    if not studios:
-        logger.warning("Нет активных студий — бот простаивает.")
-        return
 
-    bots, tasks = [], []
-    for studio in studios:
-        # Пропускаем активную студию без токена, чтобы одна некорректная запись
-        # не уронила старт всех остальных студий.
-        if not studio.bot_token:
-            logger.warning("Студия %s (%s) активна, но без токена бота — пропущена",
-                           studio.slug, studio.id)
-            continue
-        bot = build_bot(studio)
-        dp = build_dispatcher(studio)
-        bots.append(bot)
-        tasks.append(dp.start_polling(bot, handle_signals=False))
-        logger.info("Студия %s (%s): polling запущен", studio.slug, studio.id)
+async def _on_shutdown(app: web.Application):
+    app[CLEANUP_TASK_KEY].cancel()
+    await shutdown(app[REGISTRY_KEY])
 
-    try:
-        await asyncio.gather(*tasks)
-    finally:
-        for bot in bots:
-            await bot.session.close()
+
+def main():
+    registry = StudioBotRegistry()
+    app = build_webhook_app(registry)
+    app.on_startup.append(_on_startup)
+    app.on_shutdown.append(_on_shutdown)
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("WEBHOOK_PORT", "8081")))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

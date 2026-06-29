@@ -8,10 +8,6 @@ from src.bot.states import MyOrdersStates
 from src.bot.keyboards import get_my_orders_keyboard, get_order_detail_keyboard
 from src.services.delivery_options import delivery_display_name
 
-router = Router()
-
-
-@router.callback_query(F.data == "my_orders")
 async def show_my_orders(callback: CallbackQuery, state: FSMContext, ctx):
     """Показать мои заказы."""
     user = await ctx.orders.get_or_create_user(
@@ -40,9 +36,6 @@ async def show_my_orders(callback: CallbackQuery, state: FSMContext, ctx):
     await state.set_state(MyOrdersStates.viewing_orders)
     await callback.answer()
 
-
-@router.message(Command("orders"))
-@router.message(Command("myorders"))
 async def cmd_orders(message: Message, state: FSMContext, ctx):
     """Команда /orders или /myorders для просмотра заказов."""
     user = await ctx.orders.get_or_create_user(
@@ -70,8 +63,6 @@ async def cmd_orders(message: Message, state: FSMContext, ctx):
 
     await state.set_state(MyOrdersStates.viewing_orders)
 
-
-@router.callback_query(F.data.startswith("order_details:"))
 async def show_order_details(callback: CallbackQuery, state: FSMContext, ctx):
     """Показать детали заказа."""
     order_id = int(callback.data.split(":")[1])
@@ -128,3 +119,11 @@ async def show_order_details(callback: CallbackQuery, state: FSMContext, ctx):
 
     await state.set_state(MyOrdersStates.viewing_order_details)
     await callback.answer()
+
+def build_my_orders_router() -> Router:
+    r = Router(name="my_orders")
+    r.callback_query.register(show_my_orders, F.data == "my_orders")
+    r.message.register(cmd_orders, Command("orders"))
+    r.message.register(cmd_orders, Command("myorders"))
+    r.callback_query.register(show_order_details, F.data.startswith("order_details:"))
+    return r

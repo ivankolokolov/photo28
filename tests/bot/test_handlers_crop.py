@@ -92,3 +92,12 @@ async def test_handle_webapp_data_saves_crop_and_sends_delivery(db_session):
 
     # Состояние переключено
     assert await state.get_state() == OrderStates.selecting_delivery.state
+
+
+def test_build_crop_router_registers_handlers():
+    from src.bot.handlers.crop import build_crop_router
+    from aiogram import Router
+    r = build_crop_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 1
+    assert len(r.callback_query.handlers) >= 2

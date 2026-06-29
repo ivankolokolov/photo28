@@ -92,3 +92,12 @@ async def test_show_order_details_contains_delivery_display_name(db_session):
     )
     # Проверяем состояние
     assert await state.get_state() == MyOrdersStates.viewing_order_details.state
+
+
+def test_build_my_orders_router_registers_handlers():
+    from src.bot.handlers.my_orders import build_my_orders_router
+    from aiogram import Router
+    r = build_my_orders_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 2
+    assert len(r.callback_query.handlers) >= 2

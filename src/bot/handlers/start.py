@@ -11,9 +11,6 @@ from src.bot.keyboards import get_format_keyboard
 from src.services.settings_service import SettingKeys
 from src.models.order import OrderStatus
 
-router = Router()
-
-
 def get_welcome_message(ctx: StudioContext) -> str:
     """Возвращает приветственное сообщение с актуальными данными."""
     manager = ctx.studio.manager_username or "manager"
@@ -75,7 +72,6 @@ def get_continue_keyboard(order_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-@router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext, ctx: StudioContext):
     """Обработчик команды /start."""
     await state.clear()
@@ -109,7 +105,6 @@ async def cmd_start(message: Message, state: FSMContext, ctx: StudioContext):
     await state.set_state(OrderStates.selecting_format)
 
 
-@router.message(Command("chatid"))
 async def cmd_chatid(message: Message):
     """Показывает Chat ID текущего чата."""
     chat_id = message.chat.id
@@ -126,7 +121,6 @@ async def cmd_chatid(message: Message):
     )
 
 
-@router.callback_query(F.data.startswith("continue_order:"))
 async def continue_order(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Продолжение существующего заказа."""
     order_id = int(callback.data.split(":")[1])
@@ -146,7 +140,6 @@ async def continue_order(callback: CallbackQuery, state: FSMContext, ctx: Studio
     await callback.answer()
 
 
-@router.callback_query(F.data == "new_order")
 async def new_order(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Создание нового заказа."""
     await state.clear()
@@ -171,7 +164,6 @@ async def new_order(callback: CallbackQuery, state: FSMContext, ctx: StudioConte
     await callback.answer()
 
 
-@router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext, ctx: StudioContext):
     """Команда /cancel — отмена текущего действия."""
     current_state = await state.get_state()
@@ -207,7 +199,6 @@ async def cmd_cancel(message: Message, state: FSMContext, ctx: StudioContext):
         )
 
 
-@router.message(Command("help"))
 async def cmd_help(message: Message, ctx: StudioContext):
     """Команда /help — справка."""
     manager = ctx.studio.manager_username or "manager"
@@ -226,3 +217,14 @@ async def cmd_help(message: Message, ctx: StudioContext):
         f"<b>Связь с менеджером:</b> @{manager}",
         parse_mode="HTML",
     )
+
+
+def build_start_router() -> Router:
+    r = Router(name="start")
+    r.message.register(cmd_start, CommandStart())
+    r.message.register(cmd_chatid, Command("chatid"))
+    r.message.register(cmd_cancel, Command("cancel"))
+    r.message.register(cmd_help, Command("help"))
+    r.callback_query.register(continue_order, F.data.startswith("continue_order:"))
+    r.callback_query.register(new_order, F.data == "new_order")
+    return r

@@ -24,8 +24,6 @@ from src.models.photo import Photo
 
 logger = logging.getLogger(__name__)
 
-router = Router()
-
 # Словарь для отслеживания media_group
 _media_groups: Dict[str, dict] = {}
 _single_photo_tasks: Dict[int, dict] = {}
@@ -37,11 +35,9 @@ https://dariakis28.ru/kadrirovanie-fotografiy
 
 Пришлите мне фото. Чтобы сохранить качество — присылайте файлами "без сжатия" 📎"""
 
-
 def get_min_photos(ctx: StudioContext) -> int:
     """Получает минимальное количество фото из настроек студии."""
     return ctx.settings.get_int(SettingKeys.MIN_PHOTOS, 10)
-
 
 async def analyze_photos_for_crop(
     bot: Bot,
@@ -104,10 +100,8 @@ async def analyze_photos_for_crop(
 
     return len(photos), auto_approved, needs_review
 
-
 # === Выбор формата (двухуровневый) ===
 
-@router.callback_query(F.data.startswith("format_cat:"))
 async def select_format_category(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Выбор категории формата — показываем варианты."""
     cat_id = int(callback.data.split(":")[1])
@@ -130,8 +124,6 @@ async def select_format_category(callback: CallbackQuery, state: FSMContext, ctx
     )
     await callback.answer()
 
-
-@router.callback_query(F.data == "back_to_formats")
 async def back_to_formats(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Возврат к списку форматов."""
     await callback.message.edit_text(
@@ -141,8 +133,6 @@ async def back_to_formats(callback: CallbackQuery, state: FSMContext, ctx: Studi
     await state.set_state(OrderStates.selecting_format)
     await callback.answer()
 
-
-@router.callback_query(F.data.startswith("format:"))
 async def select_format(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Выбор конкретного формата фотографий."""
     product_id = int(callback.data.split(":")[1])
@@ -180,7 +170,6 @@ async def select_format(callback: CallbackQuery, state: FSMContext, ctx: StudioC
     await state.set_state(OrderStates.uploading_photos)
     await callback.answer()
 
-
 # === Загрузка фото ===
 
 async def _send_media_group_confirmation(bot: Bot, media_group_id: str, studio_id: int):
@@ -213,7 +202,6 @@ async def _send_media_group_confirmation(bot: Bot, media_group_id: str, studio_i
         reply_markup=get_photo_actions_keyboard(has_photos=True),
     )
 
-
 async def _send_single_photo_confirmation(bot: Bot, user_id: int, order_id: int, studio_id: int):
     """Отправляет сообщение о добавленном одиночном фото."""
     await asyncio.sleep(0.3)
@@ -241,7 +229,6 @@ async def _send_single_photo_confirmation(bot: Bot, user_id: int, order_id: int,
         text=f"{text}\n\nПродолжайте отправлять фото или выберите действие:",
         reply_markup=get_photo_actions_keyboard(has_photos=True),
     )
-
 
 async def _add_photo_to_batch(
     message: Message,
@@ -307,8 +294,6 @@ async def _add_photo_to_batch(
         )
         _single_photo_tasks[user_id]["task"] = task
 
-
-@router.message(OrderStates.uploading_photos, F.photo)
 async def handle_photo(message: Message, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Обработка загруженного фото (сжатого)."""
     file_id = message.photo[-1].file_id
@@ -316,8 +301,6 @@ async def handle_photo(message: Message, state: FSMContext, bot: Bot, ctx: Studi
     thumbnail_file_id = message.photo[thumb_idx].file_id
     await _add_photo_to_batch(message, state, bot, file_id, ctx, is_document=False, thumbnail_file_id=thumbnail_file_id)
 
-
-@router.message(OrderStates.uploading_photos, F.document)
 async def handle_document(message: Message, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Обработка загруженного документа (без сжатия)."""
     mime_type = message.document.mime_type or ""
@@ -332,8 +315,6 @@ async def handle_document(message: Message, state: FSMContext, bot: Bot, ctx: St
     thumbnail_file_id = message.document.thumbnail.file_id if message.document.thumbnail else None
     await _add_photo_to_batch(message, state, bot, file_id, ctx, is_document=True, thumbnail_file_id=thumbnail_file_id)
 
-
-@router.message(OrderStates.uploading_photos, F.video | F.video_note | F.animation)
 async def handle_video_rejected(message: Message):
     """Отклонение видео."""
     await message.answer(
@@ -341,8 +322,6 @@ async def handle_video_rejected(message: Message):
         "Пожалуйста, отправляйте только фотографии (JPG, PNG, HEIC)."
     )
 
-
-@router.message(OrderStates.uploading_photos, F.audio | F.voice)
 async def handle_audio_rejected(message: Message):
     """Отклонение аудио."""
     await message.answer(
@@ -350,8 +329,6 @@ async def handle_audio_rejected(message: Message):
         "Пожалуйста, отправляйте только фотографии."
     )
 
-
-@router.message(OrderStates.uploading_photos, F.sticker)
 async def handle_sticker_rejected(message: Message):
     """Отклонение стикеров."""
     await message.answer(
@@ -359,8 +336,6 @@ async def handle_sticker_rejected(message: Message):
         "Пожалуйста, отправляйте фотографии."
     )
 
-
-@router.message(OrderStates.uploading_photos, F.text)
 async def handle_text_in_upload(message: Message):
     """Текст в режиме загрузки фото."""
     await message.answer(
@@ -369,8 +344,6 @@ async def handle_text_in_upload(message: Message):
         reply_markup=get_photo_actions_keyboard(has_photos=True),
     )
 
-
-@router.callback_query(F.data == "add_another_format")
 async def add_another_format(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Добавить фото другого формата."""
     await callback.message.edit_text(
@@ -381,8 +354,6 @@ async def add_another_format(callback: CallbackQuery, state: FSMContext, ctx: St
     await state.set_state(OrderStates.selecting_format)
     await callback.answer()
 
-
-@router.callback_query(F.data == "finish_photos")
 async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Завершение отбора фото."""
     data = await state.get_data()
@@ -452,7 +423,6 @@ async def finish_photos(callback: CallbackQuery, state: FSMContext, bot: Bot, ct
     await state.set_state(OrderStates.reviewing_order)
     await callback.answer()
 
-
 # === Сводка заказа ===
 
 async def show_order_summary(message, order, ctx: StudioContext, edit: bool = False):
@@ -497,7 +467,6 @@ async def show_order_summary(message, order, ctx: StudioContext, edit: bool = Fa
             parse_mode="HTML",
         )
 
-
 async def show_order_summary_new(bot: Bot, chat_id: int, order, ctx: StudioContext):
     """Отправляет новое сообщение со сводкой заказа."""
     photos_by_product = order.photos_by_product()
@@ -534,10 +503,8 @@ async def show_order_summary_new(bot: Bot, chat_id: int, order, ctx: StudioConte
         parse_mode="HTML",
     )
 
-
 # === Навигация ===
 
-@router.callback_query(F.data == "back_to_photos")
 async def back_to_photos(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Возврат к сводке заказа."""
     data = await state.get_data()
@@ -557,8 +524,6 @@ async def back_to_photos(callback: CallbackQuery, state: FSMContext, ctx: Studio
 
     await callback.answer()
 
-
-@router.callback_query(F.data == "back_to_summary")
 async def back_to_summary(callback: CallbackQuery, state: FSMContext, ctx: StudioContext):
     """Возврат к сводке заказа."""
     data = await state.get_data()
@@ -571,7 +536,6 @@ async def back_to_summary(callback: CallbackQuery, state: FSMContext, ctx: Studi
 
     await state.set_state(OrderStates.reviewing_order)
     await callback.answer()
-
 
 # === Удаление фото ===
 
@@ -594,7 +558,6 @@ def _get_photo_caption(photo, idx: int, total: int, ctx: StudioContext, extra_te
     if extra_text:
         caption += f"\n\n{extra_text}"
     return caption
-
 
 async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: int, ctx: StudioContext, extra_text: str = ""):
     """Отправляет превью фото."""
@@ -637,8 +600,6 @@ async def _send_photo_preview(bot: Bot, chat_id: int, photo, idx: int, total: in
             parse_mode="HTML",
         )
 
-
-@router.callback_query(F.data == "delete_photos")
 async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Начало удаления фото."""
     data = await state.get_data()
@@ -659,8 +620,6 @@ async def start_delete_photos(callback: CallbackQuery, state: FSMContext, bot: B
     await state.set_state(OrderStates.deleting_photos)
     await callback.answer()
 
-
-@router.callback_query(OrderStates.deleting_photos, F.data.startswith("preview_photo:"))
 async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Переход к другому фото для превью."""
     idx = int(callback.data.split(":")[1])
@@ -700,14 +659,10 @@ async def preview_photo(callback: CallbackQuery, state: FSMContext, bot: Bot, ct
 
     await callback.answer()
 
-
-@router.callback_query(OrderStates.deleting_photos, F.data == "nav_disabled")
 async def nav_disabled_handler(callback: CallbackQuery):
     """Неактивная кнопка навигации."""
     await callback.answer()
 
-
-@router.callback_query(OrderStates.deleting_photos, F.data.startswith("delete_photo:"))
 async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Удаление конкретного фото."""
     photo_id = int(callback.data.split(":")[1])
@@ -766,8 +721,6 @@ async def delete_photo(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx
                 bot, callback.from_user.id, photo, current_idx, len(order.photos), ctx, extra_text
             )
 
-
-@router.callback_query(OrderStates.deleting_photos, F.data == "finish_deleting")
 async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot, ctx: StudioContext):
     """Завершение удаления фото."""
     data = await state.get_data()
@@ -802,3 +755,25 @@ async def finish_deleting(callback: CallbackQuery, state: FSMContext, bot: Bot, 
         await state.set_state(OrderStates.selecting_format)
 
     await callback.answer()
+
+def build_order_router() -> Router:
+    r = Router(name="order")
+    r.callback_query.register(select_format_category, F.data.startswith("format_cat:"))
+    r.callback_query.register(back_to_formats, F.data == "back_to_formats")
+    r.callback_query.register(select_format, F.data.startswith("format:"))
+    r.message.register(handle_photo, OrderStates.uploading_photos, F.photo)
+    r.message.register(handle_document, OrderStates.uploading_photos, F.document)
+    r.message.register(handle_video_rejected, OrderStates.uploading_photos, F.video | F.video_note | F.animation)
+    r.message.register(handle_audio_rejected, OrderStates.uploading_photos, F.audio | F.voice)
+    r.message.register(handle_sticker_rejected, OrderStates.uploading_photos, F.sticker)
+    r.message.register(handle_text_in_upload, OrderStates.uploading_photos, F.text)
+    r.callback_query.register(add_another_format, F.data == "add_another_format")
+    r.callback_query.register(finish_photos, F.data == "finish_photos")
+    r.callback_query.register(back_to_photos, F.data == "back_to_photos")
+    r.callback_query.register(back_to_summary, F.data == "back_to_summary")
+    r.callback_query.register(start_delete_photos, F.data == "delete_photos")
+    r.callback_query.register(preview_photo, OrderStates.deleting_photos, F.data.startswith("preview_photo:"))
+    r.callback_query.register(nav_disabled_handler, OrderStates.deleting_photos, F.data == "nav_disabled")
+    r.callback_query.register(delete_photo, OrderStates.deleting_photos, F.data.startswith("delete_photo:"))
+    r.callback_query.register(finish_deleting, OrderStates.deleting_photos, F.data == "finish_deleting")
+    return r
