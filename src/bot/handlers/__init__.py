@@ -1,26 +1,25 @@
 """Обработчики бота."""
 from aiogram import Router
 
-from src.bot.handlers.start import router as start_router
-from src.bot.handlers.order import router as order_router
-from src.bot.handlers.delivery import router as delivery_router
-from src.bot.handlers.payment import router as payment_router
-from src.bot.handlers.my_orders import router as my_orders_router
-from src.bot.handlers.manager import router as manager_router
-from src.bot.handlers.crop import router as crop_router
+from src.bot.handlers.start import build_start_router
+from src.bot.handlers.order import build_order_router
+from src.bot.handlers.delivery import build_delivery_router
+from src.bot.handlers.payment import build_payment_router
+from src.bot.handlers.my_orders import build_my_orders_router
+from src.bot.handlers.manager import build_manager_router
+from src.bot.handlers.crop import build_crop_router
 
 
 def setup_routers() -> Router:
     """Настраивает и возвращает главный роутер."""
     main_router = Router()
-    
-    main_router.include_router(start_router)
-    main_router.include_router(order_router)
-    main_router.include_router(delivery_router)
-    main_router.include_router(payment_router)
-    main_router.include_router(my_orders_router)
-    main_router.include_router(manager_router)
-    main_router.include_router(crop_router)
-    
-    return main_router
 
+    main_router.include_router(build_start_router())
+    main_router.include_router(build_order_router())
+    main_router.include_router(build_delivery_router())
+    main_router.include_router(build_payment_router())
+    main_router.include_router(build_my_orders_router())
+    main_router.include_router(build_manager_router())
+    main_router.include_router(build_crop_router())
+
+    return main_router
