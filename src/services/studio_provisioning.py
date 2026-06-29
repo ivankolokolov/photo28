@@ -1,4 +1,5 @@
 """Провижининг новой студии: тенант + админ + дефолтные настройки + шаблон каталога."""
+import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.studio import Studio
@@ -33,7 +34,11 @@ async def provision_studio(
     admin_password: str,
 ) -> Studio:
     """Создаёт студию и весь её стартовый набор данных."""
-    studio = Studio(slug=slug, name=name, bot_token=encrypt_secret(bot_token))
+    studio = Studio(
+        slug=slug, name=name,
+        bot_token=encrypt_secret(bot_token),
+        webhook_secret=secrets.token_urlsafe(32),
+    )
     session.add(studio)
     await session.flush()  # получить studio.id до коммита
 
