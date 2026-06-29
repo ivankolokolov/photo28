@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # Fernet encryption key for studio secrets
     fernet_key: str = Field(default="", alias="FERNET_KEY")
 
+    # Webhook
+    base_webhook_url: str = Field(default="", alias="BASE_WEBHOOK_URL")
+
     def ensure_dirs(self) -> None:
         """Создаёт необходимые директории."""
         self.photos_dir.mkdir(parents=True, exist_ok=True)
