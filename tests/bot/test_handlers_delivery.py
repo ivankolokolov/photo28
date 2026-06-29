@@ -55,3 +55,12 @@ async def test_select_delivery_edits_message_and_sets_state(db_session):
 
     # Проверяем состояние
     assert await state.get_state() == OrderStates.selecting_delivery.state
+
+
+def test_build_delivery_router_registers_handlers():
+    from src.bot.handlers.delivery import build_delivery_router
+    from aiogram import Router
+    r = build_delivery_router()
+    assert isinstance(r, Router)
+    assert len(r.message.handlers) >= 6
+    assert len(r.callback_query.handlers) >= 5
