@@ -24,17 +24,12 @@ from src.services.settings_service import SettingsService, SettingKeys
 from src.services.analytics_service import AnalyticsService
 from src.services.product_service import ProductService
 from src.models.order import OrderStatus
+from src.admin.auth import authenticate
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Загружаем кеши при старте админки."""
-    async with async_session() as session:
-        settings_service = SettingsService(session)
-        await settings_service.load_cache()
-
-        product_service = ProductService(session)
-        await product_service.load_cache()
+    """Кеши настроек/товаров грузятся пер-студийно в роутах (per-request), не глобально."""
     yield
 
 
@@ -113,8 +108,8 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 def check_auth(request: Request) -> bool:
-    """Проверяет авторизацию."""
-    return request.session.get("authenticated", False)
+    """Проверяет авторизацию (новая сессия на базе AdminUser)."""
+    return bool(request.session.get("user_id"))
 
 
 async def require_auth(request: Request):
@@ -138,12 +133,18 @@ async def login(request: Request, username: str = Form(...), password: str = For
     if not _check_rate_limit(client_ip):
         return RedirectResponse("/login?error=rate_limit", status_code=303)
     
-    if username == settings.admin_username and password == settings.admin_password:
-        request.session["authenticated"] = True
+    async with async_session() as session:
+        admin = await authenticate(session, username, password)
+
+    if admin:
+        request.session["user_id"] = admin.id
+        request.session["username"] = admin.username
+        request.session["role"] = admin.role.value
+        request.session["studio_id"] = admin.studio_id
         # Очищаем попытки при успешном входе
         _login_attempts.pop(client_ip, None)
         return RedirectResponse("/", status_code=303)
-    
+
     _record_login_attempt(client_ip)
     return RedirectResponse("/login?error=invalid", status_code=303)
 

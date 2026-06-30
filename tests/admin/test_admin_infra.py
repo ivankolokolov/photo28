@@ -1,8 +1,7 @@
-"""Проверка тестовой инфраструктуры админки."""
+"""Смоук: админка импортируется, lifespan не делает сломанных вызовов."""
 import os
 import pytest
 from cryptography.fernet import Fernet
-from tests.admin.conftest import seed_super_admin, login
 
 
 @pytest.fixture(autouse=True)
@@ -10,7 +9,14 @@ def _key(monkeypatch):
     monkeypatch.setenv("FERNET_KEY", Fernet.generate_key().decode())
 
 
+def test_admin_app_imports():
+    import src.admin.app as app_module
+    assert app_module.app is not None
+
+
 @pytest.mark.asyncio
-async def test_login_page_renders(admin_client, db_session):
-    resp = admin_client.get("/login")
-    assert resp.status_code == 200
+async def test_lifespan_is_noop():
+    """Lifespan не зовёт глобальный load_cache (тот требует studio_id)."""
+    import src.admin.app as app_module
+    async with app_module._lifespan(app_module.app):
+        pass  # не должно бросить

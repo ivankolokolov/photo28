@@ -1,46 +1,38 @@
-"""Фикстуры для интеграционных тестов админки."""
-import contextlib
-import pytest
-from fastapi.testclient import TestClient
+"""Хелперы для тестов админки.
 
-from src.services.studio_provisioning import provision_studio
+Роуты тестируем ВЫЗОВОМ функций-обработчиков напрямую (с фейковым Request) на
+том же event loop, что и тестовая БД-сессия. Это надёжнее TestClient: TestClient
+гоняет приложение на отдельном loop'е, а asyncpg-соединение тестовой db_session
+привязано к loop'у теста → иначе «Future attached to a different loop».
+"""
+import contextlib
+from types import SimpleNamespace
+
 from src.services.auth import hash_password
 from src.models.admin_user import AdminUser, AdminRole
 
 
-def _session_factory(db_session):
+class FakeRequest:
+    """Минимальный заменитель starlette Request для прямого вызова роутов."""
+    def __init__(self, session=None, path="/", scheme="http", client_host="test",
+                 query_params=None):
+        self.session = session if session is not None else {}
+        self.url = SimpleNamespace(path=path, scheme=scheme)
+        self.client = SimpleNamespace(host=client_host)
+        self.query_params = query_params or {}
+        self.headers = {}
+
+
+def use_test_session(monkeypatch, db_session):
+    """Подменяет src.admin.app.async_session на фабрику, отдающую тестовую сессию."""
+    import src.admin.app as app_module
+
     @contextlib.asynccontextmanager
     async def _factory():
         yield db_session
-    return _factory
 
-
-@contextlib.asynccontextmanager
-async def _noop_lifespan(app):
-    """No-op lifespan для тестов — пропускаем прогрев кешей."""
-    yield
-
-
-@pytest.fixture
-def admin_client(db_session, monkeypatch):
-    """TestClient с подменённым async_session на тестовую сессию."""
-    import src.admin.app as app_module
-    monkeypatch.setattr(app_module, "async_session", _session_factory(db_session))
-    # Lifespan использует старые сигнатуры — подменяем на no-op для тестов.
-    app_module.app.router.lifespan_context = _noop_lifespan
-    client = TestClient(app_module.app)
-    with client:
-        # Патчим wait_shutdown, чтобы также закрывать stream_receive.
-        # Starlette TestClient оставляет его открытым, что вызывает ResourceWarning
-        # в __del__ при GC в последующих async-тестах (баг Starlette/anyio + Python 3.9).
-        _orig_wait_shutdown = client.wait_shutdown
-
-        async def _patched_wait_shutdown() -> None:
-            await _orig_wait_shutdown()
-            await client.stream_receive.aclose()
-
-        client.wait_shutdown = _patched_wait_shutdown
-        yield client
+    monkeypatch.setattr(app_module, "async_session", _factory)
+    return app_module
 
 
 async def seed_super_admin(db_session, username="root", password="pw"):
@@ -59,6 +51,6 @@ async def seed_studio_admin(db_session, studio, username, password="pw"):
     return admin
 
 
-def login(client, username, password):
-    return client.post("/login", data={"username": username, "password": password},
-                       follow_redirects=False)
+def admin_session(role, studio_id=None, user_id=1, username="u"):
+    """Готовый session-словарь залогиненного админа для FakeRequest."""
+    return {"user_id": user_id, "username": username, "role": role, "studio_id": studio_id}
