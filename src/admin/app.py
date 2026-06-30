@@ -15,6 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from sqlalchemy import select
+
 from src.config import settings
 from src.database import async_session
 from src.services.order_service import OrderService
@@ -23,8 +25,10 @@ from src.services.yandex_disk import YandexDiskService
 from src.services.settings_service import SettingsService, SettingKeys
 from src.services.analytics_service import AnalyticsService
 from src.services.product_service import ProductService
+from src.services.studio_provisioning import provision_studio
 from src.models.order import OrderStatus
-from src.admin.auth import authenticate
+from src.models.studio import Studio
+from src.admin.auth import authenticate, require_super_admin
 
 
 @asynccontextmanager
@@ -852,6 +856,74 @@ async def save_crop_data(request: Request):
 
 
 # ============== АНАЛИТИКА ==============
+
+# ============== СТУДИИ (только super_admin) ==============
+
+@app.get("/studios", response_class=HTMLResponse)
+async def studios_list(request: Request):
+    """Список всех студий — только для super_admin."""
+    require_super_admin(request)
+    async with async_session() as session:
+        result = await session.execute(select(Studio).order_by(Studio.id))
+        studios = result.scalars().all()
+    return templates.TemplateResponse(request, "studios.html", {"studios": studios})
+
+
+@app.post("/studios")
+async def studios_create(
+    request: Request,
+    slug: str = Form(...),
+    name: str = Form(...),
+    bot_token: str = Form(...),
+    admin_username: str = Form(...),
+    admin_password: str = Form(...),
+):
+    """Создать новую студию — только для super_admin."""
+    require_super_admin(request)
+    async with async_session() as session:
+        await provision_studio(
+            session,
+            slug=slug,
+            name=name,
+            bot_token=bot_token,
+            admin_username=admin_username,
+            admin_password=admin_password,
+        )
+    return RedirectResponse("/studios", status_code=303)
+
+
+# ВАЖНО: /studios/exit-view зарегистрирован ДО /studios/{studio_id}/...
+# иначе FastAPI матчит "exit-view" как studio_id.
+
+@app.post("/studios/exit-view")
+async def studios_exit_view(request: Request):
+    """Выйти из режима просмотра от имени студии."""
+    require_super_admin(request)
+    request.session.pop("active_studio_id", None)
+    return RedirectResponse("/studios", status_code=303)
+
+
+@app.post("/studios/{studio_id}/toggle")
+async def studios_toggle(request: Request, studio_id: int):
+    """Инвертировать kill-switch студии — только для super_admin."""
+    require_super_admin(request)
+    async with async_session() as session:
+        result = await session.execute(select(Studio).where(Studio.id == studio_id))
+        studio = result.scalar_one_or_none()
+        if not studio:
+            raise HTTPException(status_code=404, detail="Студия не найдена")
+        studio.is_active = not studio.is_active
+        await session.commit()
+    return RedirectResponse("/studios", status_code=303)
+
+
+@app.post("/studios/{studio_id}/view-as")
+async def studios_view_as(request: Request, studio_id: int):
+    """Переключить активную студию для super_admin (view-as)."""
+    require_super_admin(request)
+    request.session["active_studio_id"] = studio_id
+    return RedirectResponse("/", status_code=303)
+
 
 @app.get("/analytics", response_class=HTMLResponse)
 async def analytics_page(request: Request, _: None = Depends(require_auth)):
