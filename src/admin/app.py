@@ -427,24 +427,27 @@ async def serve_photo(request: Request, order_number: str, filename: str):
 
 @app.get("/promocodes", response_class=HTMLResponse)
 async def promocodes_list(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     async with async_session() as session:
         from sqlalchemy import select
         from src.models.promocode import Promocode
-        result = await session.execute(select(Promocode).order_by(Promocode.created_at.desc()))
+        result = await session.execute(
+            select(Promocode)
+            .where(Promocode.studio_id == studio_id)
+            .order_by(Promocode.created_at.desc())
+        )
         promocodes = result.scalars().all()
-    return templates.TemplateResponse("promocodes.html", {"request": request, "promocodes": promocodes})
+    return templates.TemplateResponse(request, "promocodes.html", {"promocodes": promocodes})
 
 
 @app.post("/promocodes")
 async def create_promocode(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     form = await request.form()
     async with async_session() as session:
         from src.models.promocode import Promocode
         promo = Promocode(
+            studio_id=studio_id,
             code=form.get("code", "").upper().strip(),
             discount_percent=int(form["discount_percent"]) if form.get("discount_percent") else None,
             discount_amount=int(form["discount_amount"]) if form.get("discount_amount") else None,
@@ -461,31 +464,35 @@ async def create_promocode(request: Request):
 
 @app.post("/promocodes/{promo_id}/delete")
 async def delete_promocode(request: Request, promo_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     async with async_session() as session:
         from sqlalchemy import select
         from src.models.promocode import Promocode
-        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        result = await session.execute(
+            select(Promocode).where(Promocode.id == promo_id, Promocode.studio_id == studio_id)
+        )
         promo = result.scalar_one_or_none()
-        if promo:
-            await session.delete(promo)
-            await session.commit()
+        if promo is None:
+            raise HTTPException(status_code=404, detail="Промокод не найден")
+        await session.delete(promo)
+        await session.commit()
     return RedirectResponse("/promocodes", status_code=303)
 
 
 @app.post("/promocodes/{promo_id}/toggle")
 async def toggle_promocode(request: Request, promo_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     async with async_session() as session:
         from sqlalchemy import select
         from src.models.promocode import Promocode
-        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        result = await session.execute(
+            select(Promocode).where(Promocode.id == promo_id, Promocode.studio_id == studio_id)
+        )
         promo = result.scalar_one_or_none()
-        if promo:
-            promo.is_active = not promo.is_active
-            await session.commit()
+        if promo is None:
+            raise HTTPException(status_code=404, detail="Промокод не найден")
+        promo.is_active = not promo.is_active
+        await session.commit()
     return RedirectResponse("/promocodes", status_code=303)
 
 
