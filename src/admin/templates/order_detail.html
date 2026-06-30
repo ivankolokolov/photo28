@@ -63,11 +63,10 @@
             </tr>
         </thead>
         <tbody>
-            {% for product_id, count in order.photos_by_product().items() %}
-            {% set product = ProductService.get_product(product_id) %}
+            {% for item in photos_by_product %}
             <tr>
-                <td>{{ product.short_name if product else 'Товар #' ~ product_id }}</td>
-                <td>{{ count }} шт.</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.count }} шт.</td>
             </tr>
             {% endfor %}
         </tbody>

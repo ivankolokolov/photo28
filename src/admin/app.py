@@ -28,7 +28,8 @@ from src.services.product_service import ProductService
 from src.services.studio_provisioning import provision_studio
 from src.models.order import OrderStatus
 from src.models.studio import Studio
-from src.admin.auth import authenticate, require_super_admin
+from src.admin.auth import authenticate, require_super_admin, require_studio
+from src.services.crypto import decrypt_secret
 
 
 @asynccontextmanager
@@ -163,13 +164,12 @@ async def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         all_orders = await service.get_all_orders(limit=1000)
-        
+
         stats = {
             "total_orders": len(all_orders),
             "pending_payment": len([o for o in all_orders if o.status == OrderStatus.PENDING_PAYMENT]),
@@ -178,15 +178,16 @@ async def dashboard(request: Request):
             "printing": len([o for o in all_orders if o.status == OrderStatus.PRINTING]),
             "shipped": len([o for o in all_orders if o.status == OrderStatus.SHIPPED]),
         }
-        
+
         recent_orders = await service.get_all_orders(limit=10)
-    
+
     file_service = FileService(settings.bot_token)
     storage_stats = file_service.get_storage_stats()
-    
+
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
-        {"request": request, "stats": stats, "orders": recent_orders, "storage": storage_stats},
+        {"stats": stats, "orders": recent_orders, "storage": storage_stats},
     )
 
 
@@ -201,48 +202,48 @@ async def orders_list(
     date_to: Optional[str] = None,
     page: int = Query(default=1, ge=1),
 ):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     per_page = 20
     offset = (page - 1) * per_page
-    
+
     date_from_dt = None
     date_to_dt = None
-    
+
     if date_from:
         try:
             date_from_dt = datetime.strptime(date_from, "%Y-%m-%d")
         except ValueError:
             pass
-    
+
     if date_to:
         try:
             date_to_dt = datetime.strptime(date_to, "%Y-%m-%d")
         except ValueError:
             pass
-    
+
     status_enum = None
     if status:
         try:
             status_enum = OrderStatus(status)
         except ValueError:
             pass
-    
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         orders, total_count = await service.search_orders(
             search=search, status=status_enum,
             date_from=date_from_dt, date_to=date_to_dt,
             limit=per_page, offset=offset,
         )
-    
+
     total_pages = (total_count + per_page - 1) // per_page
-    
+
     return templates.TemplateResponse(
+        request,
         "orders.html",
         {
-            "request": request, "orders": orders,
+            "orders": orders,
             "current_status": status, "search": search or "",
             "date_from": date_from or "", "date_to": date_to or "",
             "page": page, "total_pages": total_pages,
@@ -255,29 +256,59 @@ async def orders_list(
 
 @app.get("/orders/{order_id}", response_class=HTMLResponse)
 async def order_detail(request: Request, order_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        await SettingsService(session).load_cache(studio_id)
+        await ProductService(session).load_cache(studio_id)
+
+        service = OrderService(session, studio_id)
         order = await service.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
-    
+
+        # Resolve product display names server-side
+        photos_by_product = order.photos_by_product()
+        photos_info = []
+        for pid, count in photos_by_product.items():
+            product = ProductService.get_product(studio_id, pid)
+            name = product.short_name if product else f"Товар #{pid}"
+            photos_info.append({"name": name, "count": count})
+
     return templates.TemplateResponse(
+        request,
         "order_detail.html",
-        {"request": request, "order": order, "statuses": OrderStatus, "ProductService": ProductService},
+        {
+            "order": order,
+            "statuses": OrderStatus,
+            "photos_by_product": photos_info,
+        },
     )
 
 
 # === Изменение статуса ===
 
-async def send_client_notification(order, new_status: str):
+async def send_client_notification(order, new_status: str, studio_id: int):
     from aiogram import Bot
+    from sqlalchemy import select as _select
     from src.services.notification_service import NotificationService
+    from src.bot.context import SettingsFacade, ProductsFacade
     try:
-        bot = Bot(token=settings.bot_token)
-        notification_service = NotificationService(bot)
+        async with async_session() as session:
+            result = await session.execute(_select(Studio).where(Studio.id == studio_id))
+            studio = result.scalar_one_or_none()
+            if not studio or not studio.bot_token:
+                import logging
+                logging.warning("send_client_notification: studio %s not found or no bot_token", studio_id)
+                return
+        bot_token = decrypt_secret(studio.bot_token)
+        bot = Bot(token=bot_token)
+        notification_service = NotificationService(
+            bot,
+            studio,
+            SettingsFacade(studio_id),
+            ProductsFacade(studio_id),
+        )
         await notification_service.notify_client_status_changed(order, new_status)
         await bot.session.close()
     except Exception as e:
@@ -290,25 +321,24 @@ async def update_order_status(
     request: Request, order_id: int,
     status: str = Form(...), notify_client: bool = Form(default=True),
 ):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         order = await service.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
-        
+
         old_status = order.status.value
         try:
             new_status = OrderStatus(status)
             await service.update_order_status(order, new_status)
             if notify_client and old_status != status:
                 order = await service.get_order_by_id(order_id)
-                await send_client_notification(order, status)
+                await send_client_notification(order, status, studio_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Неверный статус")
-    
+
     return RedirectResponse(f"/orders/{order_id}", status_code=303)
 
 
@@ -316,21 +346,20 @@ async def update_order_status(
 
 @app.get("/orders/{order_id}/download")
 async def download_order_photos(request: Request, order_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         order = await service.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
-    
+
     file_service = FileService(settings.bot_token)
     try:
         await file_service.download_all_order_photos(order)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка скачивания: {e}")
-    
+
     return RedirectResponse(f"/orders/{order_id}?downloaded=1", status_code=303)
 
 
@@ -338,21 +367,20 @@ async def download_order_photos(request: Request, order_id: int):
 
 @app.post("/orders/{order_id}/upload-yandex")
 async def upload_to_yandex(request: Request, order_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         order = await service.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
-    
+
     file_service = FileService(settings.bot_token)
     order_dir = file_service.get_order_dir(order)
-    
+
     if not order_dir.exists() or not list(order_dir.glob("*.*")):
         raise HTTPException(status_code=400, detail="Сначала скачайте фото из Telegram")
-    
+
     yandex_service = YandexDiskService()
     try:
         await yandex_service.upload_order_photos(order, order_dir)
@@ -360,7 +388,7 @@ async def upload_to_yandex(request: Request, order_id: int):
         raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {e}")
     finally:
         await yandex_service.close()
-    
+
     return RedirectResponse(f"/orders/{order_id}?uploaded=1", status_code=303)
 
 
@@ -368,18 +396,17 @@ async def upload_to_yandex(request: Request, order_id: int):
 
 @app.get("/orders/{order_id}/photos")
 async def list_order_photos(request: Request, order_id: int):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
-        service = OrderService(session)
+        service = OrderService(session, studio_id)
         order = await service.get_order_by_id(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Заказ не найден")
-    
+
     file_service = FileService(settings.bot_token)
     photos = file_service.get_order_photos_paths(order)
-    
+
     return templates.TemplateResponse(
         "photos.html",
         {"request": request, "order": order, "photos": photos},
