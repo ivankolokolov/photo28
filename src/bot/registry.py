@@ -100,6 +100,10 @@ class StudioBotRegistry:
     def entries(self) -> List[Tuple[int, Bot, Dispatcher]]:
         return list(self._by_secret.values())
 
+    def studio_ids(self) -> set:
+        """Возвращает множество studio_id, зарегистрированных в реестре."""
+        return set(self._secret_by_studio.keys())
+
 
 def build_bot(studio: Studio) -> Bot:
     """Создаёт Bot с расшифрованным токеном студии."""

@@ -19,14 +19,30 @@
             <a href="/analytics" {% if request.url.path == "/analytics" %}class="active"{% endif %}>📊 Аналитика</a>
             <a href="/promocodes" {% if request.url.path == "/promocodes" %}class="active"{% endif %}>Промокоды</a>
             <a href="/settings" {% if request.url.path == "/settings" %}class="active"{% endif %}>⚙️ Настройки</a>
-            <a href="/bot-control" {% if request.url.path == "/bot-control" %}class="active"{% endif %}>🤖 Бот</a>
+            {% if admin and admin.role == "super_admin" %}
+            <a href="/studios" {% if "/studios" in request.url.path %}class="active"{% endif %}>🏢 Студии</a>
+            {% endif %}
             <a href="/logout">Выход</a>
         </nav>
+        {% if admin %}
+        <div class="admin-bar">
+            <span class="admin-user">👤 {{ admin.username }}</span>
+            {% if admin.role == "super_admin" %}
+                {% if active_studio_name %}
+                    <span class="active-studio">🏢 Студия: {{ active_studio_name }}</span>
+                    <form method="post" action="/studios/exit-view" class="exit-view-form" style="display:inline">
+                        <button type="submit">Выйти из студии</button>
+                    </form>
+                {% else %}
+                    <span class="active-studio muted">🏢 — выберите студию</span>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
     </header>
-    
+
     <main class="container">
         {% block content %}{% endblock %}
     </main>
 </body>
 </html>
-

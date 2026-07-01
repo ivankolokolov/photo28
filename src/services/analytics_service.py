@@ -11,9 +11,10 @@ from src.models.user import User
 
 class AnalyticsService:
     """Сервис для сбора аналитики."""
-    
-    def __init__(self, session: AsyncSession):
+
+    def __init__(self, session: AsyncSession, studio_id: int):
         self.session = session
+        self.studio_id = studio_id
     
     async def get_revenue_stats(
         self,
@@ -45,6 +46,7 @@ class AnalyticsService:
                 Order.status.in_(paid_statuses),
                 Order.created_at >= start_date,
                 Order.created_at <= end_date,
+                Order.studio_id == self.studio_id,
             )
         )
         
@@ -82,6 +84,7 @@ class AnalyticsService:
             and_(
                 Order.status.in_(paid_statuses),
                 Order.created_at >= start_date,
+                Order.studio_id == self.studio_id,
             )
         ).group_by(
             func.date(Order.created_at)
@@ -115,7 +118,7 @@ class AnalyticsService:
         query = select(
             Order.status,
             func.count(Order.id).label("count"),
-        ).group_by(Order.status)
+        ).where(Order.studio_id == self.studio_id).group_by(Order.status)
         
         result = await self.session.execute(query)
         rows = result.all()
@@ -150,17 +153,18 @@ class AnalyticsService:
                 Order.status.in_(paid_statuses),
                 Order.created_at >= start_date,
                 Order.created_at <= end_date,
+                Order.studio_id == self.studio_id,
             )
         ).group_by(Photo.product_id)
-        
+
         result = await self.session.execute(query)
         rows = result.all()
-        
+
         total = sum(row.count for row in rows)
-        
+
         stats = []
         for row in sorted(rows, key=lambda x: x.count, reverse=True):
-            product = ProductService.get_product(row.product_id)
+            product = ProductService.get_product(self.studio_id, row.product_id)
             product_name = product.short_name if product else f"Товар #{row.product_id}"
             stats.append({
                 "format": str(row.product_id),
@@ -168,7 +172,7 @@ class AnalyticsService:
                 "count": row.count,
                 "percent": round(row.count / total * 100, 1) if total > 0 else 0,
             })
-        
+
         return stats
     
     async def get_delivery_stats(
@@ -196,6 +200,7 @@ class AnalyticsService:
                 Order.delivery_type.isnot(None),
                 Order.created_at >= start_date,
                 Order.created_at <= end_date,
+                Order.studio_id == self.studio_id,
             )
         ).group_by(Order.delivery_type)
         
@@ -226,22 +231,25 @@ class AnalyticsService:
         ).join(
             Order, Photo.order_id == Order.id
         ).where(
-            Order.status.in_(printing_statuses)
+            and_(
+                Order.status.in_(printing_statuses),
+                Order.studio_id == self.studio_id,
+            )
         ).group_by(Photo.product_id)
-        
+
         result = await self.session.execute(query)
         rows = result.all()
-        
+
         stats = []
         for row in sorted(rows, key=lambda x: x.count, reverse=True):
-            product = ProductService.get_product(row.product_id)
+            product = ProductService.get_product(self.studio_id, row.product_id)
             product_name = product.short_name if product else f"Товар #{row.product_id}"
             stats.append({
                 "format": str(row.product_id),
                 "format_name": product_name,
                 "count": row.count,
             })
-        
+
         return stats
     
     async def get_customer_stats(self) -> Dict[str, Any]:
@@ -251,16 +259,22 @@ class AnalyticsService:
         
         users_with_orders = await self.session.execute(
             select(func.count(func.distinct(Order.user_id))).where(
-                Order.status != OrderStatus.DRAFT
+                and_(
+                    Order.status != OrderStatus.DRAFT,
+                    Order.studio_id == self.studio_id,
+                )
             )
         )
         with_orders = users_with_orders.scalar()
-        
+
         repeat_query = select(
             func.count()
         ).select_from(
             select(Order.user_id).where(
-                Order.status != OrderStatus.DRAFT
+                and_(
+                    Order.status != OrderStatus.DRAFT,
+                    Order.studio_id == self.studio_id,
+                )
             ).group_by(Order.user_id).having(
                 func.count(Order.id) > 1
             ).subquery()
@@ -293,7 +307,10 @@ class AnalyticsService:
         ).join(
             Order, User.id == Order.user_id
         ).where(
-            Order.status.in_(paid_statuses)
+            and_(
+                Order.status.in_(paid_statuses),
+                Order.studio_id == self.studio_id,
+            )
         ).group_by(
             User.id
         ).order_by(
@@ -317,22 +334,28 @@ class AnalyticsService:
     async def get_conversion_stats(self) -> Dict[str, Any]:
         """Статистика конверсии."""
         drafts = await self.session.execute(
-            select(func.count(Order.id)).where(Order.status == OrderStatus.DRAFT)
+            select(func.count(Order.id)).where(
+                and_(Order.status == OrderStatus.DRAFT, Order.studio_id == self.studio_id)
+            )
         )
         total_drafts = drafts.scalar()
-        
+
         paid_statuses = [
             OrderStatus.PAID, OrderStatus.CONFIRMED, OrderStatus.PRINTING,
             OrderStatus.READY, OrderStatus.SHIPPED, OrderStatus.DELIVERED,
         ]
-        
+
         paid = await self.session.execute(
-            select(func.count(Order.id)).where(Order.status.in_(paid_statuses))
+            select(func.count(Order.id)).where(
+                and_(Order.status.in_(paid_statuses), Order.studio_id == self.studio_id)
+            )
         )
         total_paid = paid.scalar()
-        
+
         cancelled = await self.session.execute(
-            select(func.count(Order.id)).where(Order.status == OrderStatus.CANCELLED)
+            select(func.count(Order.id)).where(
+                and_(Order.status == OrderStatus.CANCELLED, Order.studio_id == self.studio_id)
+            )
         )
         total_cancelled = cancelled.scalar()
         

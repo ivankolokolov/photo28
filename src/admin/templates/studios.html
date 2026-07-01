@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Студии — Photo28 Admin{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">🏢 Студии</h1>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Создать студию</h2>
+    </div>
+    <form method="post" action="/studios">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="slug">Slug*</label>
+                <input type="text" id="slug" name="slug" class="form-input" required placeholder="my-studio">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="name">Название*</label>
+                <input type="text" id="name" name="name" class="form-input" required placeholder="Моя Студия">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="bot_token">Bot Token*</label>
+                <input type="text" id="bot_token" name="bot_token" class="form-input" required placeholder="1234567890:ABC...">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="admin_username">Логин админа*</label>
+                <input type="text" id="admin_username" name="admin_username" class="form-input" required placeholder="studio_owner">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="admin_password">Пароль админа*</label>
+                <input type="password" id="admin_password" name="admin_password" class="form-input" required placeholder="••••••••">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Создать студию</button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Все студии</h2>
+        {% if request.session.get("active_studio_id") %}
+        <form method="post" action="/studios/exit-view" style="display: inline;">
+            <button type="submit" class="btn btn-sm">Выйти из режима просмотра</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Slug</th>
+                    <th>Название</th>
+                    <th>Бот</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for studio in studios %}
+                <tr>
+                    <td>{{ studio.id }}</td>
+                    <td><code>{{ studio.slug }}</code></td>
+                    <td>{{ studio.name }}</td>
+                    <td>{{ studio.bot_username or '—' }}</td>
+                    <td>
+                        {% if studio.is_active %}
+                        <span class="badge badge-paid">Активна</span>
+                        {% else %}
+                        <span class="badge badge-cancelled">Отключена</span>
+                        {% endif %}
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <form method="post" action="/studios/{{ studio.id }}/toggle" style="display: inline;">
+                            <button type="submit" class="btn btn-sm" title="{% if studio.is_active %}Kill-switch{% else %}Включить{% endif %}">
+                                {% if studio.is_active %}⏸ Откл.{% else %}▶ Вкл.{% endif %}
+                            </button>
+                        </form>
+                        <form method="post" action="/studios/{{ studio.id }}/view-as" style="display: inline;">
+                            <button type="submit" class="btn btn-sm" title="Просматривать от имени этой студии">👁 View-as</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted);">
+                        Студий пока нет
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -344,17 +344,23 @@ class OrderService:
     async def update_photo_crop(
         self,
         photo_id: int,
+        order_id: int,
         crop_data: str,
         crop_confirmed: bool = True,
     ) -> Optional[Photo]:
-        """Обновляет данные кадрирования фото."""
-        photo = await self.get_photo_by_id(photo_id)
+        """Обновляет кадрирование фото ТОЛЬКО в рамках указанного заказа.
+
+        Привязка к order_id не даёт по чужому photo_id переписать кроп фото
+        другого заказа/студии (Photo не имеет studio_id, только order_id).
+        """
+        query = select(Photo).where(Photo.id == photo_id, Photo.order_id == order_id)
+        photo = (await self.session.execute(query)).scalar_one_or_none()
         if not photo:
             return None
-        
+
         photo.crop_data = crop_data
         photo.crop_confirmed = crop_confirmed
-        
+
         await self.session.commit()
         await self.session.refresh(photo)
         return photo

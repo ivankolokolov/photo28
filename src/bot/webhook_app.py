@@ -23,7 +23,10 @@ async def _handle_webhook(request: web.Request) -> web.Response:
     except Exception:
         return web.Response(status=400, text="bad json")
     update = Update.model_validate(data)
-    await dp.feed_webhook_update(bot, update)
+    try:
+        await dp.feed_webhook_update(bot, update)
+    except Exception as exc:
+        logger.exception("Ошибка обработки webhook update (studio=%s): %s", studio_id, exc)
     return web.Response(status=200)
 
 

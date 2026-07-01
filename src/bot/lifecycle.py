@@ -18,6 +18,12 @@ async def register_studio(registry: StudioBotRegistry, studio) -> None:
     entry = registry.get_by_secret(studio.webhook_secret) if studio.webhook_secret else None
     if entry is None:
         return
+    if not settings.base_webhook_url:
+        logger.warning(
+            "Студия %s (%s): BASE_WEBHOOK_URL не задан, set_webhook пропущен",
+            studio.slug, studio.id,
+        )
+        return
     _sid, bot, _dp = entry
     await bot.set_webhook(webhook_url_for(studio.webhook_secret))
     logger.info("Студия %s (%s): webhook установлен", studio.slug, studio.id)

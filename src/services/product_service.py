@@ -106,9 +106,9 @@ class ProductService:
         await self.load_cache(studio_id)
         return product
 
-    async def update_product(self, product_id: int, **kwargs) -> Optional[Product]:
+    async def update_product(self, product_id: int, studio_id: int, **kwargs) -> Optional[Product]:
         product = await self.get_product_by_id(product_id)
-        if not product:
+        if not product or product.studio_id != studio_id:
             return None
         for key, value in kwargs.items():
             if hasattr(product, key):
@@ -118,19 +118,18 @@ class ProductService:
         await self.load_cache(product.studio_id)
         return product
 
-    async def delete_product(self, product_id: int) -> bool:
+    async def delete_product(self, product_id: int, studio_id: int) -> bool:
         product = await self.get_product_by_id(product_id)
-        if not product:
+        if not product or product.studio_id != studio_id:
             return False
-        studio_id = product.studio_id
         await self.session.delete(product)
         await self.session.commit()
         await self.load_cache(studio_id)
         return True
 
-    async def toggle_product(self, product_id: int) -> Optional[Product]:
+    async def toggle_product(self, product_id: int, studio_id: int) -> Optional[Product]:
         product = await self.get_product_by_id(product_id)
-        if not product:
+        if not product or product.studio_id != studio_id:
             return None
         product.is_active = not product.is_active
         await self.session.commit()
