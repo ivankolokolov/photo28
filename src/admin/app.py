@@ -30,7 +30,7 @@ from src.services.studio_provisioning import provision_studio
 from src.models.order import Order, OrderStatus
 from src.models.photo import Photo
 from src.models.studio import Studio
-from src.admin.auth import authenticate, require_super_admin, require_studio
+from src.admin.auth import authenticate, current_admin, effective_studio_id, require_super_admin, require_studio
 from src.services.crypto import decrypt_secret
 
 
@@ -113,6 +113,12 @@ app.mount("/webapp/js", StaticFiles(directory=WEBAPP_DIR / "js"), name="webapp_j
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
+def base_context(request: Request, **extra) -> dict:
+    """Базовый контекст для всех TemplateResponse: admin + active_studio_name."""
+    admin = current_admin(request)
+    active_name = extra.pop("active_studio_name", None)
+    return {"request": request, "admin": admin, "active_studio_name": active_name, **extra}
+
 
 def check_auth(request: Request) -> bool:
     """Проверяет авторизацию (новая сессия на базе AdminUser)."""
@@ -189,7 +195,7 @@ async def dashboard(request: Request):
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"stats": stats, "orders": recent_orders, "storage": storage_stats},
+        base_context(request, stats=stats, orders=recent_orders, storage=storage_stats),
     )
 
 
@@ -244,13 +250,14 @@ async def orders_list(
     return templates.TemplateResponse(
         request,
         "orders.html",
-        {
-            "orders": orders,
-            "current_status": status, "search": search or "",
-            "date_from": date_from or "", "date_to": date_to or "",
-            "page": page, "total_pages": total_pages,
-            "total_count": total_count, "statuses": OrderStatus,
-        },
+        base_context(
+            request,
+            orders=orders,
+            current_status=status, search=search or "",
+            date_from=date_from or "", date_to=date_to or "",
+            page=page, total_pages=total_pages,
+            total_count=total_count, statuses=OrderStatus,
+        ),
     )
 
 
@@ -280,11 +287,7 @@ async def order_detail(request: Request, order_id: int):
     return templates.TemplateResponse(
         request,
         "order_detail.html",
-        {
-            "order": order,
-            "statuses": OrderStatus,
-            "photos_by_product": photos_info,
-        },
+        base_context(request, order=order, statuses=OrderStatus, photos_by_product=photos_info),
     )
 
 
@@ -439,7 +442,7 @@ async def promocodes_list(request: Request):
             .order_by(Promocode.created_at.desc())
         )
         promocodes = result.scalars().all()
-    return templates.TemplateResponse(request, "promocodes.html", {"promocodes": promocodes})
+    return templates.TemplateResponse(request, "promocodes.html", base_context(request, promocodes=promocodes))
 
 
 @app.post("/promocodes")
@@ -534,7 +537,7 @@ async def settings_page(request: Request, saved: str = None):
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {"grouped_settings": grouped, "group_names": SETTING_GROUPS, "saved": saved == "1"},
+        base_context(request, grouped_settings=grouped, group_names=SETTING_GROUPS, saved=saved == "1"),
     )
 
 
@@ -577,12 +580,13 @@ async def products_list(request: Request, saved: str = None):
     return templates.TemplateResponse(
         request,
         "products.html",
-        {
-            "products": top_level,
-            "children_map": children_map,
-            "all_products": products,
-            "saved": saved == "1",
-        },
+        base_context(
+            request,
+            products=top_level,
+            children_map=children_map,
+            all_products=products,
+            saved=saved == "1",
+        ),
     )
 
 
@@ -869,7 +873,7 @@ async def studios_list(request: Request):
     async with async_session() as session:
         result = await session.execute(select(Studio).order_by(Studio.id))
         studios = result.scalars().all()
-    return templates.TemplateResponse(request, "studios.html", {"studios": studios})
+    return templates.TemplateResponse(request, "studios.html", base_context(request, studios=studios))
 
 
 @app.post("/studios")
@@ -943,9 +947,10 @@ async def analytics_page(request: Request):
     return templates.TemplateResponse(
         request,
         "analytics.html",
-        {
-            "summary": summary, "chart_data": chart_data,
-            "format_stats": format_stats, "delivery_stats": delivery_stats,
-            "top_customers": top_customers, "customer_stats": customer_stats,
-        },
+        base_context(
+            request,
+            summary=summary, chart_data=chart_data,
+            format_stats=format_stats, delivery_stats=delivery_stats,
+            top_customers=top_customers, customer_stats=customer_stats,
+        ),
     )
