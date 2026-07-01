@@ -49,6 +49,13 @@ async def handle_webapp_data(message: Message, state: FSMContext, ctx: StudioCon
             await message.answer("⚠️ Не получены данные кадрирования")
             return
 
+        # order_id из FSM-состояния — привязываем кроп только к текущему заказу
+        state_data = await state.get_data()
+        order_id = state_data.get("order_id")
+        if not order_id:
+            await message.answer("⚠️ Заказ не найден. Начните заново: /start")
+            return
+
         # Сохраняем данные кропа для каждого фото
         saved_count = 0
         for photo_data in photos:
@@ -58,12 +65,14 @@ async def handle_webapp_data(message: Message, state: FSMContext, ctx: StudioCon
             logger.info(f"Processing photo {photo_id}: crop={crop}")
 
             if photo_id and crop:
-                await ctx.orders.update_photo_crop(
+                updated = await ctx.orders.update_photo_crop(
                     photo_id=photo_id,
+                    order_id=order_id,
                     crop_data=json.dumps(crop),
                     crop_confirmed=True
                 )
-                saved_count += 1
+                if updated:
+                    saved_count += 1
 
         logger.info(f"Saved {saved_count} photos crop data")
 

@@ -414,15 +414,18 @@ async def list_order_photos(request: Request, order_id: int):
 
     return templates.TemplateResponse(
         "photos.html",
-        {"request": request, "order": order, "photos": photos},
+        base_context(request, order=order, photos=photos),
     )
 
 
 @app.get("/storage/{order_number}/{filename}")
 async def serve_photo(request: Request, order_number: str, filename: str):
-    if not check_auth(request):
-        raise HTTPException(status_code=403)
-    file_path = settings.photos_dir / order_number / filename
+    studio_id = require_studio(request)
+    async with async_session() as session:
+        order = await OrderService(session, studio_id).get_order_by_number(order_number)
+    if not order:
+        raise HTTPException(status_code=404)
+    file_path = settings.photos_dir / str(order.studio_id) / order_number / filename
     if not file_path.exists():
         raise HTTPException(status_code=404)
     return FileResponse(file_path)
@@ -830,12 +833,14 @@ async def save_crop_data(request: Request):
             photo_id = photo_data.get("id")
             crop = photo_data.get("crop")
             if photo_id and crop:
-                await service.update_photo_crop(
+                updated = await service.update_photo_crop(
                     photo_id=photo_id,
+                    order_id=order.id,
                     crop_data=json.dumps(crop),
                     crop_confirmed=True
                 )
-                saved_count += 1
+                if updated:
+                    saved_count += 1
 
         studio_result = await session.execute(select(Studio).where(Studio.id == studio_id))
         studio = studio_result.scalar_one_or_none()
