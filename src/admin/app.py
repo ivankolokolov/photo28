@@ -554,63 +554,6 @@ async def save_settings(request: Request):
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
-# === Управление ботом ===
-
-@app.get("/bot-control", response_class=HTMLResponse)
-async def bot_control_page(request: Request, action: str = None):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    restart_requested = SettingsService.get_bool(SettingKeys.RESTART_REQUESTED, False)
-    scheduled_time_str = SettingsService.get(SettingKeys.RESTART_SCHEDULED_TIME, "")
-    scheduled_time = None
-    if scheduled_time_str:
-        try:
-            scheduled_time = datetime.fromisoformat(scheduled_time_str)
-        except ValueError:
-            pass
-    return templates.TemplateResponse(
-        "bot_control.html",
-        {"request": request, "restart_requested": restart_requested, "scheduled_time": scheduled_time, "action": action},
-    )
-
-
-@app.post("/bot-control/restart-now")
-async def restart_bot_now(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    async with async_session() as session:
-        service = SettingsService(session)
-        await service.set_value(SettingKeys.RESTART_REQUESTED, "true")
-        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, "")
-    return RedirectResponse("/bot-control?action=restart_requested", status_code=303)
-
-
-@app.post("/bot-control/schedule-restart")
-async def schedule_restart(request: Request, hour: int = Form(5)):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    now = datetime.now()
-    scheduled = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-    if scheduled <= now:
-        scheduled += timedelta(days=1)
-    async with async_session() as session:
-        service = SettingsService(session)
-        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, scheduled.isoformat())
-        await service.set_value(SettingKeys.RESTART_REQUESTED, "false")
-    return RedirectResponse("/bot-control?action=scheduled", status_code=303)
-
-
-@app.post("/bot-control/cancel-restart")
-async def cancel_restart(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    async with async_session() as session:
-        service = SettingsService(session)
-        await service.set_value(SettingKeys.RESTART_REQUESTED, "false")
-        await service.set_value(SettingKeys.RESTART_SCHEDULED_TIME, "")
-    return RedirectResponse("/bot-control?action=cancelled", status_code=303)
-
-
 # ============== ТОВАРЫ / ФОРМАТЫ ==============
 
 @app.get("/products", response_class=HTMLResponse)
