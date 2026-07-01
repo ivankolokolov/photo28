@@ -516,11 +516,11 @@ HIDDEN_SETTING_GROUPS = {"system"}
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, saved: str = None):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     async with async_session() as session:
         service = SettingsService(session)
-        all_settings = await service.get_all()
+        await service.load_cache(studio_id)
+        all_settings = await service.get_all(studio_id)
         grouped = {}
         for setting in all_settings:
             group = setting.group
@@ -530,22 +530,25 @@ async def settings_page(request: Request, saved: str = None):
                 grouped[group] = []
             grouped[group].append(setting)
     return templates.TemplateResponse(
+        request,
         "settings.html",
-        {"request": request, "grouped_settings": grouped, "group_names": SETTING_GROUPS, "saved": saved == "1"},
+        {"grouped_settings": grouped, "group_names": SETTING_GROUPS, "saved": saved == "1"},
     )
 
 
 @app.post("/settings")
 async def save_settings(request: Request):
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
+    studio_id = require_studio(request)
     form_data = await request.form()
     async with async_session() as session:
         service = SettingsService(session)
         for key, value in form_data.items():
             if key.startswith("setting_"):
                 setting_key = key[8:]
-                await service.set_value(setting_key, value)
+                try:
+                    await service.set_value(studio_id, setting_key, value)
+                except ValueError:
+                    pass  # настройка не найдена для этой студии — пропускаем
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
@@ -611,13 +614,12 @@ async def cancel_restart(request: Request):
 @app.get("/products", response_class=HTMLResponse)
 async def products_list(request: Request, saved: str = None):
     """Управление товарами и форматами."""
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
         service = ProductService(session)
-        products = await service.get_all_products()
-    
+        products = await service.get_all_products(studio_id)
+
     # Группируем: top-level и их children
     top_level = [p for p in products if p.parent_id is None]
     children_map = {}
@@ -626,11 +628,11 @@ async def products_list(request: Request, saved: str = None):
             if p.parent_id not in children_map:
                 children_map[p.parent_id] = []
             children_map[p.parent_id].append(p)
-    
+
     return templates.TemplateResponse(
+        request,
         "products.html",
         {
-            "request": request,
             "products": top_level,
             "children_map": children_map,
             "all_products": products,
@@ -656,12 +658,12 @@ async def create_product(
     sort_order: int = Form(0),
 ):
     """Создание нового товара."""
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
         service = ProductService(session)
         await service.create_product(
+            studio_id=studio_id,
             name=name,
             short_name=short_name,
             slug=slug,
@@ -675,7 +677,7 @@ async def create_product(
             aspect_ratio=aspect_ratio,
             sort_order=sort_order,
         )
-    
+
     return RedirectResponse("/products?saved=1", status_code=303)
 
 
@@ -695,13 +697,13 @@ async def update_product(
     sort_order: int = Form(0),
 ):
     """Обновление товара."""
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
         service = ProductService(session)
-        await service.update_product(
+        result = await service.update_product(
             product_id,
+            studio_id=studio_id,
             name=name,
             short_name=short_name,
             emoji=emoji,
@@ -713,33 +715,37 @@ async def update_product(
             aspect_ratio=aspect_ratio,
             sort_order=sort_order,
         )
-    
+        if result is None:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+
     return RedirectResponse("/products?saved=1", status_code=303)
 
 
 @app.post("/products/{product_id}/toggle")
 async def toggle_product(request: Request, product_id: int):
     """Включение/выключение товара."""
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
         service = ProductService(session)
-        await service.toggle_product(product_id)
-    
+        result = await service.toggle_product(product_id, studio_id=studio_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+
     return RedirectResponse("/products", status_code=303)
 
 
 @app.post("/products/{product_id}/delete")
 async def delete_product(request: Request, product_id: int):
     """Удаление товара."""
-    if not check_auth(request):
-        return RedirectResponse("/login", status_code=303)
-    
+    studio_id = require_studio(request)
+
     async with async_session() as session:
         service = ProductService(session)
-        await service.delete_product(product_id)
-    
+        ok = await service.delete_product(product_id, studio_id=studio_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+
     return RedirectResponse("/products", status_code=303)
 
 
