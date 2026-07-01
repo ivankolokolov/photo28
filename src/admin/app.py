@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.config import settings
 from src.database import async_session
@@ -26,7 +27,8 @@ from src.services.settings_service import SettingsService, SettingKeys
 from src.services.analytics_service import AnalyticsService
 from src.services.product_service import ProductService
 from src.services.studio_provisioning import provision_studio
-from src.models.order import OrderStatus
+from src.models.order import Order, OrderStatus
+from src.models.photo import Photo
 from src.models.studio import Studio
 from src.admin.auth import authenticate, require_super_admin, require_studio
 from src.services.crypto import decrypt_secret
@@ -182,7 +184,7 @@ async def dashboard(request: Request):
         recent_orders = await service.get_all_orders(limit=10)
 
     file_service = FileService(settings.bot_token)
-    storage_stats = file_service.get_storage_stats()
+    storage_stats = file_service.get_storage_stats(studio_id)
 
     return templates.TemplateResponse(
         request,
@@ -765,14 +767,21 @@ async def get_order_photos_api(order_id: int, token: str = None):
     """API для Mini App: получение фото заказа с данными авто-кропа."""
     if not token or not verify_api_token(order_id, token):
         raise HTTPException(status_code=403, detail="Invalid or missing token")
-    
+
     async with async_session() as session:
-        service = OrderService(session)
-        order = await service.get_order_by_id(order_id)
-        
+        order_result = await session.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(selectinload(Order.photos), selectinload(Order.user))
+        )
+        order = order_result.scalar_one_or_none()
+
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
+        studio_id = order.studio_id
+        await ProductService(session).load_cache(studio_id)
+
         photos_data = []
         for photo in order.photos:
             auto_crop = None
@@ -781,10 +790,10 @@ async def get_order_photos_api(order_id: int, token: str = None):
                     auto_crop = json.loads(photo.auto_crop_data)
                 except json.JSONDecodeError:
                     pass
-            
-            product = ProductService.get_product(photo.product_id)
+
+            product = ProductService.get_product(studio_id, photo.product_id)
             product_name = product.short_name if product else "Unknown"
-            
+
             photos_data.append({
                 "id": photo.id,
                 "url": f"/api/photo-proxy/{photo.telegram_file_id}",
@@ -798,7 +807,7 @@ async def get_order_photos_api(order_id: int, token: str = None):
                 "crop_data": photo.crop_data,
                 "crop_confirmed": photo.crop_confirmed,
             })
-        
+
         return {
             "order_id": order_id,
             "order_number": order.order_number,
@@ -837,29 +846,38 @@ async def photo_proxy(request: Request, file_id: str):
 async def save_crop_data(request: Request):
     """API для Mini App: сохранение данных кадрирования."""
     from aiogram import Bot
+    from src.bot.context import build_studio_context
     from src.bot.keyboards.main import get_delivery_keyboard
-    
+    from src.bot.handlers.delivery import get_delivery_message
+
     data = await request.json()
     order_id = data.get("order_id")
     token = data.get("token", "")
     user_id = data.get("user_id")
     photos = data.get("photos", [])
-    
+
     if not order_id:
         raise HTTPException(status_code=400, detail="order_id is required")
-    
+
     if not verify_api_token(order_id, token):
         raise HTTPException(status_code=403, detail="Invalid or missing token")
     if not photos:
         raise HTTPException(status_code=400, detail="No photos data provided")
-    
+
     async with async_session() as session:
-        service = OrderService(session)
-        order = await service.get_order_by_id(order_id)
-        
+        order_result = await session.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(selectinload(Order.photos), selectinload(Order.user))
+        )
+        order = order_result.scalar_one_or_none()
+
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
+        studio_id = order.studio_id
+        service = OrderService(session, studio_id)
+
         saved_count = 0
         for photo_data in photos:
             photo_id = photo_data.get("id")
@@ -871,27 +889,29 @@ async def save_crop_data(request: Request):
                     crop_confirmed=True
                 )
                 saved_count += 1
-    
+
+        studio_result = await session.execute(select(Studio).where(Studio.id == studio_id))
+        studio = studio_result.scalar_one_or_none()
+
     telegram_user_id = user_id or order.user.telegram_id
-    if telegram_user_id:
-        bot = Bot(token=settings.bot_token)
+    if telegram_user_id and studio and studio.bot_token:
+        bot_token = decrypt_secret(studio.bot_token)
+        bot = Bot(token=bot_token)
         try:
-            await bot.send_message(
-                chat_id=telegram_user_id,
-                text=(
-                    f"✅ <b>Кадрирование сохранено!</b>\n"
-                    f"Обработано фото: {saved_count} шт.\n\n"
-                    "📦 <b>Выберите способ доставки:</b>"
-                ),
-                reply_markup=get_delivery_keyboard(),
-                parse_mode="HTML"
-            )
+            async with async_session() as notify_session:
+                ctx = build_studio_context(notify_session, studio)
+                await bot.send_message(
+                    chat_id=telegram_user_id,
+                    text=get_delivery_message(ctx),
+                    reply_markup=get_delivery_keyboard(ctx),
+                    parse_mode="HTML"
+                )
         except Exception as e:
             import logging
             logging.error(f"Failed to send message to user: {e}")
         finally:
             await bot.session.close()
-    
+
     return {"status": "ok", "saved_count": saved_count}
 
 
@@ -966,20 +986,22 @@ async def studios_view_as(request: Request, studio_id: int):
 
 
 @app.get("/analytics", response_class=HTMLResponse)
-async def analytics_page(request: Request, _: None = Depends(require_auth)):
+async def analytics_page(request: Request):
+    studio_id = require_studio(request)
     async with async_session() as session:
-        service = AnalyticsService(session)
+        service = AnalyticsService(session, studio_id)
         summary = await service.get_dashboard_summary()
         chart_data = await service.get_revenue_by_days(30)
         format_stats = await service.get_format_stats()
         delivery_stats = await service.get_delivery_stats()
         top_customers = await service.get_top_customers(10)
         customer_stats = await service.get_customer_stats()
-    
+
     return templates.TemplateResponse(
+        request,
         "analytics.html",
         {
-            "request": request, "summary": summary, "chart_data": chart_data,
+            "summary": summary, "chart_data": chart_data,
             "format_stats": format_stats, "delivery_stats": delivery_stats,
             "top_customers": top_customers, "customer_stats": customer_stats,
         },

@@ -119,19 +119,23 @@ class FileService:
             import shutil
             shutil.rmtree(order_dir)
     
-    def get_storage_stats(self) -> dict:
-        """Возвращает статистику использования хранилища."""
+    def get_storage_stats(self, studio_id: int) -> dict:
+        """Возвращает статистику использования хранилища для студии."""
+        studio_dir = self.photos_dir / str(studio_id)
         total_size = 0
         file_count = 0
-        
-        for path in self.photos_dir.rglob("*"):
-            if path.is_file():
-                total_size += path.stat().st_size
-                file_count += 1
-        
+        orders_count = 0
+        if studio_dir.exists():
+            for order_dir in studio_dir.iterdir():
+                if order_dir.is_dir():
+                    orders_count += 1
+                    for path in order_dir.rglob("*"):
+                        if path.is_file():
+                            total_size += path.stat().st_size
+                            file_count += 1
         return {
             "total_size_mb": round(total_size / (1024 * 1024), 2),
             "file_count": file_count,
-            "orders_count": len(list(self.photos_dir.iterdir())),
+            "orders_count": orders_count,
         }
 
