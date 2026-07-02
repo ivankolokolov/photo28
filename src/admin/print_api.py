@@ -1,12 +1,20 @@
 """HTTP Print API для локального агента печати (аутентификация по Bearer-токену)."""
+import io
+
 from fastapi import APIRouter, Request, HTTPException, Body
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from aiogram import Bot
 
 from src.database import async_session
 from src.models.print_agent import PrintAgent
-from src.models.order import OrderStatus
+from src.models.order import Order, OrderStatus
+from src.models.photo import Photo
+from src.models.studio import Studio
 from src.services.print_agent_service import PrintAgentService
 from src.services.order_service import OrderService
 from src.services.product_service import ProductService
+from src.services.crypto import decrypt_secret
 
 print_router = APIRouter(prefix="/api/print")
 
@@ -58,3 +66,27 @@ async def jobs(request: Request):
                 })
             result.append({"order_id": order.id, "order_number": order.order_number, "photos": photos})
     return {"jobs": result}
+
+
+@print_router.get("/photo/{photo_id}")
+async def photo(request: Request, photo_id: int):
+    async with async_session() as session:
+        agent = await resolve_agent(request, session)
+        row = (await session.execute(
+            select(Photo, Studio)
+            .join(Order, Photo.order_id == Order.id)
+            .join(Studio, Order.studio_id == Studio.id)
+            .where(Photo.id == photo_id, Order.studio_id == agent.studio_id)
+        )).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Фото не найдено")
+        photo_obj, studio = row
+        if not studio.bot_token:
+            raise HTTPException(status_code=409, detail="У студии нет токена бота")
+        bot = Bot(token=decrypt_secret(studio.bot_token))
+        try:
+            f = await bot.get_file(photo_obj.telegram_file_id)
+            data = await bot.download_file(f.file_path)
+        finally:
+            await bot.session.close()
+    return StreamingResponse(io.BytesIO(data.read()), media_type="image/jpeg")
