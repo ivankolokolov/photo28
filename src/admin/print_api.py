@@ -131,9 +131,11 @@ async def report(request: Request, payload: dict = Body(...)):
                 ))
                 billed_positions.add(p.position)
                 billed += 1
-        # статус заказа
-        total_positions = {p.position for p in order.photos}
-        new_status = OrderStatus.READY if billed_positions >= total_positions else OrderStatus.PRINTING
-        await order_svc.update_order_status(order, new_status)
+        # Статус двигаем только если по заказу есть оттарифицированные позиции,
+        # иначе пустой/no-op рапорт не должен уводить CONFIRMED в PRINTING.
+        if billed_positions:
+            total_positions = {p.position for p in order.photos}
+            new_status = OrderStatus.READY if billed_positions >= total_positions else OrderStatus.PRINTING
+            await order_svc.update_order_status(order, new_status)
         await session.commit()
     return {"billed": billed}
