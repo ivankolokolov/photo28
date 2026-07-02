@@ -32,6 +32,7 @@ from src.models.photo import Photo
 from src.models.studio import Studio
 from src.admin.auth import authenticate, current_admin, effective_studio_id, require_super_admin, require_studio
 from src.services.crypto import decrypt_secret
+from src.admin.print_api import print_router
 
 
 @asynccontextmanager
@@ -42,6 +43,7 @@ async def _lifespan(app: FastAPI):
 
 # Создаём приложение
 app = FastAPI(title="Photo28 Admin", docs_url=None, redoc_url=None, lifespan=_lifespan)
+app.include_router(print_router)
 
 
 # === Security Middleware: заголовки безопасности ===
