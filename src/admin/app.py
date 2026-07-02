@@ -32,6 +32,7 @@ from src.models.photo import Photo
 from src.models.studio import Studio
 from src.admin.auth import authenticate, current_admin, effective_studio_id, require_super_admin, require_studio
 from src.services.crypto import decrypt_secret
+from src.services.print_agent_service import PrintAgentService
 from src.admin.print_api import print_router
 
 
@@ -961,3 +962,13 @@ async def analytics_page(request: Request):
             top_customers=top_customers, customer_stats=customer_stats,
         ),
     )
+
+
+# ============== АГЕНТ ПЕЧАТИ ==============
+
+@app.post("/print-agent/pairing")
+async def create_print_pairing(request: Request):
+    studio_id = require_studio(request)
+    async with async_session() as session:
+        agent = await PrintAgentService(session).create_pairing(studio_id)
+    return RedirectResponse(f"/settings?pairing_code={agent.pairing_code}", status_code=303)
