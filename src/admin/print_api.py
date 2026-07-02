@@ -94,6 +94,17 @@ async def photo(request: Request, photo_id: int):
     return StreamingResponse(io.BytesIO(data.read()), media_type="image/jpeg")
 
 
+@print_router.post("/health")
+async def health(request: Request, payload: dict = Body(...)):
+    async with async_session() as session:
+        agent = await resolve_agent(request, session)
+        agent.printer_status = str((payload or {}).get("printer_status", ""))[:255]
+        agent.queue_len = int((payload or {}).get("queue_len", 0) or 0)
+        agent.last_seen_at = datetime.now()
+        await session.commit()
+    return {"ok": True}
+
+
 @print_router.post("/report")
 async def report(request: Request, payload: dict = Body(...)):
     order_id = (payload or {}).get("order_id")
