@@ -15,16 +15,16 @@ from src.models.admin_user import AdminUser, AdminRole
 class FakeRequest:
     """Минимальный заменитель starlette Request для прямого вызова роутов."""
     def __init__(self, session=None, path="/", scheme="http", client_host="test",
-                 query_params=None):
+                 query_params=None, headers=None):
         self.session = session if session is not None else {}
         self.url = SimpleNamespace(path=path, scheme=scheme)
         self.client = SimpleNamespace(host=client_host)
         self.query_params = query_params or {}
-        self.headers = {}
+        self.headers = headers or {}
 
 
 def use_test_session(monkeypatch, db_session):
-    """Подменяет src.admin.app.async_session на фабрику, отдающую тестовую сессию."""
+    """Подменяет async_session в app и print_api на фабрику, отдающую тестовую сессию."""
     import src.admin.app as app_module
 
     @contextlib.asynccontextmanager
@@ -32,6 +32,13 @@ def use_test_session(monkeypatch, db_session):
         yield db_session
 
     monkeypatch.setattr(app_module, "async_session", _factory)
+
+    try:
+        import src.admin.print_api as print_api_module
+        monkeypatch.setattr(print_api_module, "async_session", _factory)
+    except ImportError:
+        pass
+
     return app_module
 
 
